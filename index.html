@@ -4225,6 +4225,11 @@ a{color:inherit;text-decoration:none}
 .preview-bar .pv-meta{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .preview-bar .pv-exit:hover{background:rgba(255,255,255,.26)}
 .app.preview-on .pagehead{top:44px}
+/* topbar ロール切替ピル（営業/現場ピル風） */
+.role-switch{display:flex;gap:2px;background:#eef2f4;border:1px solid var(--line);border-radius:11px;padding:3px;flex:none}
+.role-switch .rs{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;white-space:nowrap;transition:.12s}
+.role-switch .rs:hover{color:var(--ink)}
+.role-switch .rs.on{background:#fff;color:var(--brand-700);box-shadow:0 1px 3px rgba(0,0,0,.13)}
 .nav-item.ro .ni-ic{opacity:.7}
 .nav-item .ro-badge{margin-left:auto;font-size:10px;font-weight:700;color:var(--side-faint);
   border:1px solid var(--side-line);border-radius:20px;padding:1px 7px}
@@ -4626,6 +4631,7 @@ td b{font-weight:600}
       <span class="kbd">⌘K</span>
     </div>
 
+    <div class="role-switch" id="roleSwitch" title="表示ロールを切り替え（権限プレビュー）"></div>
     <div class="tb-spacer"></div>
 
     <div class="tb-actions">

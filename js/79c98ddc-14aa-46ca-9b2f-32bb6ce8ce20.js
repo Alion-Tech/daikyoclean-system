@@ -25,6 +25,7 @@ function enterPreview(key){
   renderSidebar();
   route(ROLE_LANDING[key]||'dashboard',0);
   document.querySelector('.main').scrollTop=0;
+  renderRoleSwitch(); renderUserRoles();
 }
 function exitPreview(){
   state.preview = null;
@@ -33,6 +34,7 @@ function exitPreview(){
   renderSidebar();
   const p = state.prevMod || {mod:'dashboard',tab:0};
   route(p.mod, p.tab);
+  renderRoleSwitch(); renderUserRoles();
 }
 
 /* ---- Sidebar ---- */
@@ -805,6 +807,15 @@ function toggleNotif(e){
 }
 function closeDropdowns(){ document.querySelectorAll('.dropdown').forEach(d=>d.classList.remove('open')); document.querySelector('.tb-user')?.classList.remove('open'); }
 
+/* ---- Topbar ロール切替ピル（モバイルの営業/現場ピル風。対象ロールの権限で画面を切替＝権限プレビュー） ---- */
+function renderRoleSwitch(){
+  const el=document.getElementById('roleSwitch'); if(!el) return;
+  const segs=[{key:'',name:'自分'}].concat(ROLES.map(r=>({key:r.key,name:r.name})));
+  el.innerHTML = segs.map(s=>{
+    const on = s.key ? state.preview===s.key : !state.preview;
+    return `<span class="rs${on?' on':''}" onclick="${s.key?`enterPreview('${s.key}')`:'exitPreview()'}">${s.name}</span>`;
+  }).join('');
+}
 /* ---- User menu (role preview entry) ---- */
 function renderUserRoles(){
   const dot = {sales:'#2b6fb3',field:'#0b7c8c',fin:'#2f9e6b',admin:'#d2483f'};
@@ -899,6 +910,7 @@ function initCharts(){
    ============================================================ */
 function init(){
   renderSidebar();
+  renderRoleSwitch();
   renderNotifs();
   CMD_INDEX = buildCmdIndex();
 
