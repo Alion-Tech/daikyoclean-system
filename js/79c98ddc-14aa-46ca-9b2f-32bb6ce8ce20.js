@@ -7,10 +7,16 @@ const state = { mod:'dashboard', tab:0, charts:[], preview:null };
 /* ---- Role preview ---- */
 const NAV_PERM = {cust:'顧客・店舗',contract:'契約管理',sales:'営業活動',plan:'作業計画',ops:'作業実行・報告',fleet:'配車・車両',doc:'作業報告書',invoice:'請求管理',revenue:'売上管理',bi:'BI分析',master:'作業マスタ',integ:'外部連携',auth:'権限管理',common:'共通・ログ'};
 const ROLE_LANDING = {admin:'dashboard',mgr:'dashboard',sales:'dashboard',fin:'invoice',field:'ops'};
+/* NAV モジュール → PERM_FUNCS のインデックス。roleLevel はこの対応で機能別マトリクスから導出 */
+const NAV_FUNC = {dashboard:0,bi:0,cust:1,contract:6,sales:7,plan:10,ops:11,fleet:10,doc:12,invoice:13,revenue:15,master:17,integ:16,auth:18,common:-1};
+function permSymLevel(v){ const s=Array.isArray(v)?v[0]:v; return ({'◎':'F','○':'E','△':'E','👁':'R','✕':'N'})[s]||'N'; }
 function roleLevel(key,navId){
-  if(navId==='dashboard') return 'F';
-  const idx = PERM_MODS.indexOf(NAV_PERM[navId]);
-  return idx<0 ? 'F' : PERM[key][idx];
+  const idx=NAV_FUNC[navId];
+  if(idx==null) return 'F';
+  if(idx<0) return 'R';
+  const row=(typeof PERM_MATRIX!=='undefined')?PERM_MATRIX[key]:null;
+  if(!row) return 'F';
+  return permSymLevel(row[idx]);
 }
 const LVL_LABEL = {F:'フル',E:'編集可',R:'参照のみ',N:'非表示'};
 function enterPreview(key){

@@ -609,33 +609,11 @@ function scopeSelect(cur){
 }
 function scr_auth_roles(){
   const cards = ROLES.map((r,i)=>`
-    <div class="role-card" onclick="setRolePanel(${i})">
+    <div class="role-card">
       <div class="kt"><div class="kic">${ic('shield')}</div><div class="lbl">${r.name}</div><span class="tag ${r.color} nodot" style="margin-left:auto">${r.users}名</span></div>
       <div style="margin:7px 0 8px"><span class="subtle" style="font-size:10.5px;margin-right:5px">アクセス範囲</span><span class="tag ${(SCOPE_DEFS.find(s=>s.key===r.scope)||SCOPE_DEFS[0]).cls} nodot">${(SCOPE_DEFS.find(s=>s.key===r.scope)||SCOPE_DEFS[0]).name}</span></div>
-      <div class="subtle" style="font-size:12px;margin:0 0 14px;line-height:1.5;min-height:40px">${r.desc}</div>
-      <button class="btn" style="width:100%;justify-content:center" onclick="event.stopPropagation();setRolePanel(${i})">権限を編集</button>
+      <div class="subtle" style="font-size:12px;margin:0;line-height:1.5">${r.desc}</div>
     </div>`).join('');
-  const panels = ROLES.map(r=>{
-    const perms = PERM[r.key];
-    const rows = [];
-    PERM_MODS.forEach((m,i)=>{
-      const fine = permFineRows(m, r.key);
-      if(fine){
-        // 機微リソース：親見出し行（操作なし）＋ 閲覧/編集/承認 のサブ行
-        rows.push([`<b>${m}</b> <span class="subtle" style="font-size:11px">機微</span>`, `<span class="subtle" style="font-size:11px">操作別に設定 ↓</span>`]);
-        fine.forEach(fr=>rows.push(fr));
-      }else{
-        const v=perms[i];
-        rows.push([m, v==='N'?`<span class="subtle">—</span>`:permSelect(v)]);
-      }
-    });
-    return `
-      <div class="panel"><div class="ph">${ic('shield','pic')}${r.name} <span class="tag ${r.color} nodot" style="margin-left:4px">${r.users}名</span>
-        <span class="sub">${r.desc}</span></div>
-        <div class="pb flush">${tbl([{t:'モジュール'},{t:'権限レベル'}],rows)}</div>
-      </div>
-      <div class="form-foot" style="margin-top:4px"><button class="btn primary" onclick="toast('${r.name} の権限を保存しました')">変更を保存</button><button class="btn">既定値に戻す</button></div>`;
-  });
   const scopeCards = SCOPE_DEFS.map(s=>{
     const rs=ROLES.filter(r=>r.scope===s.key);
     return `<div class="panel" style="margin:0"><div class="ph">${ic(s.icon,'pic')}${s.name}<span class="tag ${s.cls} nodot" style="margin-left:auto">${rs.length}ロール</span></div>
@@ -647,15 +625,19 @@ function scr_auth_roles(){
     const s=SCOPE_DEFS.find(d=>d.key===r.scope)||SCOPE_DEFS[0];
     return [`<b>${r.name}</b>`, scopeSelect(r.scope), s.see];
   }));
-  return note('権限は <b>①アクセス範囲（総管理／会社／店舗）</b> と <b>②モジュール別の操作権限</b> の2軸で設計します。ロールは 管理者／マネージャ／営業／事務（＋現場）。')+
+  const rk=['admin','mgr','sales','field','fin'], rn={admin:'管理者',mgr:'マネージャ',sales:'営業',field:'現場',fin:'事務'};
+  const legend = `<div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12px;margin:2px 0 4px;color:var(--muted)">`+Object.keys(PERM_SYM).map(k=>`<span><span class="tag ${PERM_SYM[k].cls} nodot">${k}</span> ${PERM_SYM[k].label}</span>`).join('')+`</div>`;
+  const matRows = PERM_FUNCS.map((fn,i)=>[`<b>${fn}</b>`].concat(rk.map(k=>permCell(PERM_MATRIX[k][i]))));
+  const matrix = tbl([{t:'機能'}].concat(rk.map(k=>({t:rn[k]}))), matRows);
+  return note('権限は <b>①アクセス範囲（総管理／会社／店舗）</b> と <b>②機能別の操作権限</b> の2軸で設計します。ロールは 管理者／マネージャ／営業／現場／事務。')+
     `<div style="font-weight:700;font-size:14px;margin:18px 0 12px">${ic('shield')} ① アクセス範囲（データ階層）<span class="subtle" style="font-weight:500;font-size:11.5px;margin-left:6px">総管理 ⊃ 会社単位 ⊃ 店舗単位</span></div>`+
     `<div class="grid3">${scopeCards}</div>`+
     `<div class="panel" style="margin-top:12px"><div class="ph">${ic('shield','pic')}ロール別 アクセス範囲</div><div class="pb flush">${scopeTable}</div></div>`+
-    note('<b>営業</b>は自担当顧客の店舗のみ、<b>現場</b>は担当店舗のみ表示（行レベルの絞り込み）。担当外のデータは一覧にも出ません。','warn','shield')+
-    `<div style="font-weight:700;font-size:14px;margin:24px 0 12px">${ic('shield')} ② ロール × モジュール権限</div>`+
-    `<div class="role-cards">${cards}</div>`+
-    `<div style="font-weight:700;font-size:14px;margin:20px 0 12px">権限レベルの編集</div>`+
-    segmented(ROLES.map(r=>r.name), panels)+
+    `<div class="role-cards" style="margin-top:14px">${cards}</div>`+
+    `<div style="font-weight:700;font-size:14px;margin:24px 0 10px">${ic('shield')} ② 機能別 権限マトリクス <span class="subtle" style="font-weight:500;font-size:11.5px;margin-left:6px">役割 × 機能</span></div>`+
+    legend+
+    `<div class="panel" style="margin-top:8px"><div class="pb flush">${matrix}</div></div>`+
+    note('<b>営業</b>は自担当顧客の店舗のみ、<b>現場</b>は担当店舗・自作業のみ（△＝自担当のみ／👁＝閲覧のみ）。担当外のデータは一覧にも出ません。','warn','shield')+
     note('※画面表示の制御に加え、<b>API側でも認可チェックを実施</b>します（本実装）。本画面は権限設計のプレビューです。');
 }
 
