@@ -625,19 +625,12 @@ function scr_auth_roles(){
     const s=SCOPE_DEFS.find(d=>d.key===r.scope)||SCOPE_DEFS[0];
     return [`<b>${r.name}</b>`, scopeSelect(r.scope), s.see];
   }));
-  const rk=['admin','mgr','sales','field','fin'], rn={admin:'管理者',mgr:'マネージャ',sales:'営業',field:'現場',fin:'事務'};
-  const legend = `<div style="display:flex;flex-wrap:wrap;gap:16px;font-size:12px;margin:2px 0 4px;color:var(--muted)">`+Object.keys(PERM_SYM).map(k=>`<span><span class="tag ${PERM_SYM[k].cls} nodot">${k}</span> ${PERM_SYM[k].label}</span>`).join('')+`</div>`;
-  const matRows = PERM_FUNCS.map((fn,i)=>[`<b>${fn}</b>`].concat(rk.map(k=>permCell(PERM_MATRIX[k][i]))));
-  const matrix = tbl([{t:'機能'}].concat(rk.map(k=>({t:rn[k]}))), matRows);
-  return note('権限は <b>①アクセス範囲（総管理／会社／店舗）</b> と <b>②機能別の操作権限</b> の2軸で設計します。ロールは 管理者／マネージャ／営業／現場／事務。')+
-    `<div style="font-weight:700;font-size:14px;margin:18px 0 12px">${ic('shield')} ① アクセス範囲（データ階層）<span class="subtle" style="font-weight:500;font-size:11.5px;margin-left:6px">総管理 ⊃ 会社単位 ⊃ 店舗単位</span></div>`+
+  return note('権限は <b>アクセス範囲（総管理／会社／店舗）</b> を軸に、ロール（管理者／マネージャ／営業／現場／事務）ごとに設計します。')+
+    `<div style="font-weight:700;font-size:14px;margin:18px 0 12px">${ic('shield')} アクセス範囲（データ階層）<span class="subtle" style="font-weight:500;font-size:11.5px;margin-left:6px">総管理 ⊃ 会社単位 ⊃ 店舗単位</span></div>`+
     `<div class="grid3">${scopeCards}</div>`+
     `<div class="panel" style="margin-top:12px"><div class="ph">${ic('shield','pic')}ロール別 アクセス範囲</div><div class="pb flush">${scopeTable}</div></div>`+
     `<div class="role-cards" style="margin-top:14px">${cards}</div>`+
-    `<div style="font-weight:700;font-size:14px;margin:24px 0 10px">${ic('shield')} ② 機能別 権限マトリクス <span class="subtle" style="font-weight:500;font-size:11.5px;margin-left:6px">役割 × 機能</span></div>`+
-    legend+
-    `<div class="panel" style="margin-top:8px"><div class="pb flush">${matrix}</div></div>`+
-    note('<b>営業</b>は自担当顧客の店舗のみ、<b>現場</b>は担当店舗・自作業のみ（△＝自担当のみ／👁＝閲覧のみ）。担当外のデータは一覧にも出ません。','warn','shield')+
+    note('<b>営業</b>は自担当顧客の店舗のみ、<b>現場</b>は担当店舗・自作業のみ閲覧・操作できます。担当外のデータは一覧にも出ません。','warn','shield')+
     note('※画面表示の制御に加え、<b>API側でも認可チェックを実施</b>します（本実装）。本画面は権限設計のプレビューです。');
 }
 
