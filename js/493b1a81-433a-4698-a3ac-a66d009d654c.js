@@ -368,26 +368,83 @@ function scr_master(t){
    ============================================================ */
 function scr_integ(t){
   const sets=[
-    {n:'kintone連携',rows:[['顧客マスタ同期','API','毎時 :00','05/31 14:00','正常'],['店舗マスタ同期','API','毎時 :00','05/31 14:00','正常'],['作業マスタ同期','手動','—','05/30 18:22','正常']]},
-    {n:'弥生販売連携',rows:[['請求データ同期','CSV','日次 02:00','05/31 02:00','正常'],['売上データ同期','CSV','日次 02:00','05/31 02:00','<span class="tag t-amber nodot">警告 3件</span>']]},
-    {n:'配車システム連携',rows:[['顧客同期','API','毎時','05/31 14:00','正常'],['作業同期','API','15分毎','05/31 14:15','正常']]},
-    {n:'報告書システム連携',rows:[['作業結果同期','API','リアルタイム','05/31 14:18','正常'],['写真同期','API','リアルタイム','05/31 14:18','正常']]},
-    {n:'Google Maps 連携',maps:true,rows:[['住所ジオコーディング','API','住所登録時','05/31 11:42','正常'],['配車ルート最適化','API','配車計画時','05/31 09:05','正常']]},
+    {n:'kintone連携',dir:'双方向',freq:'毎時バッチ（:00）',diff:[
+      ['顧客 C-100244 関西モール管理','店舗数 118','店舗数 117','05/31 14:00','未解消'],
+      ['店舗 S-204388 三宮店','作業頻度：月次','作業頻度：月2回','05/31 14:00','確認中'],
+    ],rows:[['顧客マスタ同期','API','毎時 :00','05/31 14:00','正常'],['店舗マスタ同期','API','毎時 :00','05/31 14:00','正常'],['作業マスタ同期','手動','—','05/30 18:22','正常']]},
+    {n:'弥生販売連携',dir:'一方向',freq:'日次バッチ（02:00）',diff:[
+      ['請求 INV-202605-0012','¥1,298,000','¥1,289,000','05/31 02:00','未解消'],
+      ['売上 2026/05 関西モール','¥1,298,000','（連携先に未登録）','05/31 02:00','未解消'],
+      ['売上 2026/05 グルメテーブル','¥1,078,000','¥1,078,000','05/31 02:00','解消済'],
+    ],rows:[['請求データ同期','CSV','日次 02:00','05/31 02:00','正常'],['売上データ同期','CSV','日次 02:00','05/31 02:00','<span class="tag t-amber nodot">警告 3件</span>']]},
+    {n:'配車システム連携',dir:'双方向',freq:'API（15分毎）',diff:[
+      ['作業 OP-77120 栄町店','予定 09:00','予定 09:30','05/31 14:15','確認中'],
+    ],rows:[['顧客同期','API','毎時','05/31 14:00','正常'],['作業同期','API','15分毎','05/31 14:15','正常']]},
+    {n:'報告書システム連携',dir:'一方向',freq:'API（リアルタイム）',diff:[],rows:[['作業結果同期','API','リアルタイム','05/31 14:18','正常'],['写真同期','API','リアルタイム','05/31 14:18','正常']]},
+    {n:'Google Maps 連携',maps:true,dir:'一方向',freq:'随時（住所登録時）',diff:[],rows:[['住所ジオコーディング','API','住所登録時','05/31 11:42','正常'],['配車ルート最適化','API','配車計画時','05/31 09:05','正常']]},
   ];
   const s=sets[t]||sets[0];
-  const kpis = s.maps ? [
-    {l:'本日 API呼出',v:'37',u:'件',icon:'pin'},{l:'キャッシュヒット率',v:'68',u:'%',d:'呼出を抑制',dir:'up',icon:'refresh',accent:'eco'},
-    {l:'月間上限',v:'10,000',u:'件',d:'当月 4,210件',dir:'flat',icon:'link'},{l:'エラー',v:'0',icon:'check',accent:'eco'},
-  ] : [
+  let mapsKpis;
+  if(s.maps){
+    // ライブカウンタ（localStorage 永続化）から算出
+    const gs=(typeof geoStats==='function')?geoStats():{calls:{},hits:{}};
+    const today=(typeof geoTodayCalls==='function')?geoTodayCalls(gs):0;
+    const monthCalls=(typeof geoMonthCalls==='function')?geoMonthCalls(gs):0;
+    const hits=(typeof geoTotalHits==='function')?geoTotalHits(gs):0;
+    const totCalls=(typeof geoTotalCalls==='function')?geoTotalCalls(gs):0;
+    const cap=(typeof GEO_CAP!=='undefined')?GEO_CAP:10000;
+    const rate=(hits+totCalls)>0 ? Math.round(hits/(hits+totCalls)*100) : 0;
+    const near = monthCalls >= cap*0.8;
+    mapsKpis=[
+      {l:'本日 API呼出',v:String(today),u:'件',icon:'pin'},
+      {l:'キャッシュヒット率',v:String(rate),u:'%',d:'呼出を抑制',dir:'up',icon:'refresh',accent:'eco'},
+      {l:'月間上限',v:cap.toLocaleString('ja-JP'),u:'件',d:'当月 '+monthCalls.toLocaleString('ja-JP')+'件',dir:'flat',icon:'link',accent:near?'amber':undefined},
+      {l:'エラー',v:'0',icon:'check',accent:'eco'},
+    ];
+  }
+  const kpis = s.maps ? mapsKpis : [
     {l:'連携ジョブ',v:String(s.rows.length),icon:'link'},{l:'本日 同期',v:'48',icon:'refresh'},
     {l:'エラー',v:'0',icon:'check',accent:'eco'},{l:'最終同期',v:'14:18',icon:'clock'},
   ];
+  // 連携方向（一方向→／双方向⇄）・同期頻度の表示
+  const dirTag = s.dir==='双方向' ? tag('t-teal','双方向 ⇄') : tag('t-blue','一方向 →');
+  const metaStrip = `<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:0 0 14px;font-size:12.5px">
+    <span class="subtle" style="font-weight:600">連携方向</span>${dirTag}
+    <span class="subtle" style="font-weight:600;margin-left:8px">同期頻度</span>${tag('t-gray',s.freq)}
+    <span style="margin-left:auto"></span>${ic('clock')}<span class="subtle">${s.dir==='双方向'?'自社⇄連携先 を相互反映':'自社→連携先 へ一方向反映'}・定義頻度で自動同期</span>
+  </div>`;
+  // 差異一覧（対象／自社値／連携先値／検出日時／状態）＋ 確認/解消アクション
+  const diff=s.diff||[];
+  const open=diff.filter(d=>d[4]!=='解消済').length;
+  const diffBadge = open?`<span class="tag t-amber nodot">差異 ${open}件</span> <span class="tag t-red nodot">${ic('bell')}管理者へ通知済</span>`
+                        :`<span class="tag t-green nodot">差異なし</span>`;
+  const stTag=st=> st==='解消済'?tag('t-green','解消済'):(st==='確認中'?tag('t-amber','確認中'):tag('t-red','未解消'));
+  const diffSection = panel(`${ic('warn','pic')}差異一覧 <span class="sub">自社データと連携先データの不一致</span>`,
+    metaStrip+
+    (diff.length?
+      tbl([{t:'対象'},{t:'自社値'},{t:'連携先値'},{t:'検出日時'},{t:'状態'},{t:'操作'}],
+        diff.map(d=>[`<b>${d[0]}</b>`,d[1],d[2],`<span class="subtle">${d[3]}</span>`,stTag(d[4]),
+          d[4]==='解消済'?'<span class="subtle">—</span>':`<span class="lnk" data-diff="確認" onclick="integDiff(this,'確認')">確認</span> <span class="lnk" data-diff="解消" onclick="integDiff(this,'解消')">解消</span>`
+        ]))
+      :note('現在、検出されている差異はありません。','eco','check'))+
+    (open?note('差異検出時は<b>管理者へ自動通知</b>（メール＋システム）。各行の「確認／解消」で手動対応できます。','warn','warn'):''));
   return kpi(kpis)+
     (s.maps?note('同一住所はキャッシュを再利用しAPI呼出を抑制。月間API上限の範囲内で運用します。','warn','warn'):'')+
-  toolbar(`<button class="btn primary">${ic('refresh')}今すぐ同期</button><button class="btn">${ic('settings')}連携設定</button>`)+
+  toolbar(`<button class="btn primary">${ic('refresh')}今すぐ同期</button><button class="btn">${ic('settings')}連携設定</button><span class="spacer"></span>${diffBadge}`)+
   tbl([{t:'同期項目'},{t:'方式'},{t:'スケジュール'},{t:'最終実行'},{t:'状態'}],s.rows.map(r=>{
     r=r.slice();r[4]=r[4]==='正常'?tag('t-green','正常'):r[4];return r;
-  }));
+  }))+
+  diffSection;
+}
+// 差異の手動対応（確認／解消）→ toast
+function integDiff(el,act){
+  const tr=el.closest('tr'); const target=tr?(tr.querySelector('b')?tr.querySelector('b').textContent:'対象'):'対象';
+  if(act==='解消'){
+    if(tr){ const cells=tr.children; if(cells.length>=6){ cells[4].innerHTML=`<span class="tag t-green">解消済</span>`; cells[5].innerHTML='<span class="subtle">—</span>'; } }
+    toast('差異を解消としてマークしました（'+target+'）');
+  }else{
+    toast('差異を確認済にしました（'+target+'）');
+  }
 }
 
 /* ============================================================
@@ -398,10 +455,11 @@ function scr_auth(t){
   // tab 0
   return toolbar(searchBox()+`<span class="spacer"></span>`+btnNew('ユーザー追加'))+
   tbl([{t:'ユーザーID'},{t:'氏名'},{t:'部門'},{t:'役割'},{t:'ロール'},{t:'状態'}],[
-    ['u-kajiwara','梶原','営業部','営業担当',tag('t-blue','営業権限'),tag('t-green','有効')],
-    ['u-yamada','山田','現場部','作業班長',tag('t-blue','現場権限'),tag('t-green','有効')],
-    ['u-sato','佐藤','経理部','経理',tag('t-blue','財務権限'),tag('t-green','有効')],
-    ['u-admin','管理者','管理部','システム',tag('t-red','管理者権限'),tag('t-green','有効')],
+    ['u-kajiwara','梶原','営業部','営業担当',tag('t-blue','営業'),tag('t-green','有効')],
+    ['u-suzuki','鈴木','営業部','課長',tag('t-purple','マネージャ'),tag('t-green','有効')],
+    ['u-yamada','山田','現場部','作業班長',tag('t-teal','現場'),tag('t-green','有効')],
+    ['u-sato','佐藤','管理部','事務',tag('t-green','事務'),tag('t-green','有効')],
+    ['u-admin','管理者','管理部','システム',tag('t-red','管理者'),tag('t-green','有効')],
   ],{click:true});
 }
 
@@ -529,10 +587,12 @@ function scr_auth_roles(){
       </div>
       <div class="form-foot" style="margin-top:4px"><button class="btn primary" onclick="toast('${r.name} の権限を保存しました')">変更を保存</button><button class="btn">既定値に戻す</button></div>`;
   });
-  return note('各モジュールの権限レベル（参照／参照・編集／フル）をロールごとに設定します。実際の画面を確認するには、右上のユーザー名メニューから<b>「権限プレビュー」</b>をご利用ください。')+
+  return note('ロール体系は <b>管理者 / マネージャ / 営業 / 事務</b>（＋現場）。各モジュールの権限レベル（参照／参照・編集／フル）をロールごとに設定します。実際の画面を確認するには、右上のユーザー名メニューから<b>「権限プレビュー」</b>をご利用ください。')+
+    note('<b>営業</b> は<b>自担当顧客のみ</b>閲覧できます（行レベルの絞り込み）。担当外の顧客・請求は一覧にも表示されません。','warn','shield')+
     `<div class="role-cards">${cards}</div>`+
     `<div style="font-weight:700;font-size:14px;margin:24px 0 12px">権限レベルの編集</div>`+
-    segmented(ROLES.map(r=>r.name), panels);
+    segmented(ROLES.map(r=>r.name), panels)+
+    note('※画面表示の制御に加え、<b>API側でも認可チェックを実施</b>します（本実装）。本画面は権限設計のプレビューです。');
 }
 
 /* ---- Screen registry ---- */

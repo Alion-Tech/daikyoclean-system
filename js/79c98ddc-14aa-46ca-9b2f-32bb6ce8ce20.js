@@ -6,7 +6,7 @@ const state = { mod:'dashboard', tab:0, charts:[], preview:null };
 
 /* ---- Role preview ---- */
 const NAV_PERM = {cust:'顧客・店舗',contract:'契約管理',sales:'営業活動',plan:'作業計画',ops:'作業実行・報告',fleet:'配車・車両',doc:'作業報告書',invoice:'請求管理',revenue:'売上管理',bi:'BI分析',master:'作業マスタ',integ:'外部連携',auth:'権限管理',common:'共通・ログ'};
-const ROLE_LANDING = {sales:'dashboard',field:'ops',fin:'invoice',admin:'dashboard'};
+const ROLE_LANDING = {admin:'dashboard',mgr:'dashboard',sales:'dashboard',fin:'invoice',field:'ops'};
 function roleLevel(key,navId){
   if(navId==='dashboard') return 'F';
   const idx = PERM_MODS.indexOf(NAV_PERM[navId]);
@@ -297,22 +297,53 @@ const ZIP_DB = {
 };
 function zipReady(v){ /* placeholder for live validation */ }
 // ジオコーディング結果キャッシュ（同一住所の API 呼出を抑制）
+// DB永続化デモ：localStorage に保存し、初期化時に読み込む
 var GEO_CACHE={};
+const GEO_CAP = 10000;               // 月間API上限（プロト値）
+const GEO_WARN_RATIO = 0.8;          // 80%到達で警告
+try{ GEO_CACHE = JSON.parse(localStorage.getItem('dk_geo_cache'))||{}; }catch(e){ GEO_CACHE={}; }
+function geoSaveCache(){ try{ localStorage.setItem('dk_geo_cache', JSON.stringify(GEO_CACHE)); }catch(e){} }
+function geoToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function geoMonth(){ return geoToday().slice(0,7); }
+// 呼出カウンタ（日付別の実呼出 calls / キャッシュヒット hits を保持）
+function geoStats(){
+  let s; try{ s=JSON.parse(localStorage.getItem('dk_geo_calls')); }catch(e){}
+  if(!s||typeof s!=='object') s={calls:{},hits:{}};
+  s.calls=s.calls||{}; s.hits=s.hits||{};
+  return s;
+}
+function geoSaveStats(s){ try{ localStorage.setItem('dk_geo_calls', JSON.stringify(s)); }catch(e){} }
+// 当月の実呼出件数を集計
+function geoMonthCalls(s){ const mo=geoMonth(); let n=0; for(const d in s.calls){ if(d.indexOf(mo)===0) n+=s.calls[d]; } return n; }
+// 当日の実呼出件数
+function geoTodayCalls(s){ return s.calls[geoToday()]||0; }
+// 累計ヒット数（全期間）
+function geoTotalHits(s){ let n=0; for(const d in s.hits) n+=s.hits[d]; return n; }
+function geoTotalCalls(s){ let n=0; for(const d in s.calls) n+=s.calls[d]; return n; }
 function mapsLookup(){
   const zip=(document.getElementById('custZip').value||'').trim();
   let hit, cached=false;
+  const s=geoStats(); const day=geoToday();
   if(GEO_CACHE[zip]){
     hit = GEO_CACHE[zip]; cached=true;
+    s.hits[day]=(s.hits[day]||0)+1;          // キャッシュヒット（API呼出なし）
   }else{
     hit = ZIP_DB[zip] || {addr:'大阪府大阪市中央区栄町2-1-'+(Math.floor(Math.random()*40)+1), geo:(34.6+Math.random()*0.2).toFixed(4)+', '+(135.4+Math.random()*0.2).toFixed(4)};
-    if(zip) GEO_CACHE[zip]=hit;
+    if(zip){ GEO_CACHE[zip]=hit; geoSaveCache(); }
+    s.calls[day]=(s.calls[day]||0)+1;        // 実API呼出（キャッシュミス時のみ加算）
   }
+  geoSaveStats(s);
   document.getElementById('custAddr').value = hit.addr;
   document.getElementById('custGeo').value = hit.geo;
   const m=document.getElementById('mapPrev');
   m.classList.add('loaded');
   m.innerHTML = `<div class="map-grid"></div><div class="map-pin">${ic('pin')}</div><div class="map-cap">${hit.addr}<br><span>${hit.geo}</span></div>`;
   toast(cached ? 'キャッシュから取得（API呼出なし）' : 'Google Maps から取得しました');
+  // 月間上限の80%到達アラート
+  const mc=geoMonthCalls(s);
+  if(!cached && mc >= GEO_CAP*GEO_WARN_RATIO){
+    toast('⚠ Google Maps API 呼出が月間上限の80%に到達（'+mc.toLocaleString('ja-JP')+'/'+GEO_CAP.toLocaleString('ja-JP')+'件）');
+  }
 }
 function addStoreRow(){
   const wrap=document.getElementById('newStores');
@@ -329,57 +360,137 @@ function recountStores(){
 /* ============================================================
    店舗CSV 一括インポート（プレビュー・検証）
    ============================================================ */
+const CSV_STEPS=['アップロード','プレビュー','検証','確定'];
+var CSV_STEP=0;                                  // 現在ステップ（0始まり）
+var CSV_LARGE=3284;                              // 大量取込シミュレーション件数
+function csvStepper(cur){
+  return `<div class="flow" style="margin:2px 0 16px">`+CSV_STEPS.map((s,i)=>
+    `<span class="step ${i<cur?'done':(i===cur?'cur':'')}"><span class="sn">${i<cur?ic('check'):(i+1)}</span>${['①','②','③','④'][i]}${s}</span>`+
+    (i<CSV_STEPS.length-1?'<span class="ar"></span>':'')).join('')+`</div>`;
+}
 function openCsvImport(){
+  CSV_STEP=0;
   document.getElementById('drawerTitle').textContent='店舗CSV 一括インポート';
-  document.getElementById('drawerSub').textContent='複数店舗をまとめて登録（重複は店舗コードで判定）';
-  document.getElementById('drawerBody').innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:10px">
+  document.getElementById('drawerSub').textContent='4ステップ（アップロード→プレビュー→検証→確定）';
+  csvRender();
+  showDrawer();
+}
+// ステップに応じて drawer 本体／フッタを描画
+function csvRender(){
+  const body=document.getElementById('drawerBody'), foot=document.getElementById('drawerFoot');
+  let h=csvStepper(CSV_STEP);
+  if(CSV_STEP===0){            // ① アップロード
+    h+=`<div style="display:flex;gap:8px;margin-bottom:10px">
       <button class="btn" onclick="toast('テンプレートCSV（店舗マスタ.csv）をダウンロードしました')">${ic('download')}テンプレートDL</button>
       <select class="search" id="csvEnc" style="flex:1"><option>文字コード：自動判定</option><option>UTF-8</option><option>Shift-JIS</option></select>
     </div>
     <div class="csv-drop" onclick="csvLoad()">${ic('upload')}<div><b>CSVファイルをドロップ</b><br><span class="subtle" style="font-size:11.5px">または クリックして選択（店舗マスタ.csv）</span></div></div>
-    <div class="hint" style="margin:12px 0">${ic('info')}<span>列：店舗コード / 店舗名 / 郵便番号 / 住所 / 顧客 / 作業頻度。<b>店舗コード</b>で既存と重複判定（重複は上書き更新）。住所は Google Maps で自動補完。</span></div>
-    <div id="csvPreview"></div>`;
-  document.getElementById('drawerFoot').innerHTML =
-    `<button class="btn primary" id="csvImportBtn" style="opacity:.45;pointer-events:none" onclick="csvDoImport()">インポート</button><button class="btn" onclick="csvLoad()">サンプルを読込</button><button class="btn ghost" onclick="closeDrawer()">閉じる</button>`;
-  showDrawer();
+    <div class="hint" style="margin:12px 0">${ic('info')}<span>列：店舗コード / 店舗名 / 郵便番号 / 住所 / 顧客 / 作業頻度。<b>店舗コード</b>で既存と重複判定。住所は Google Maps で自動補完。</span></div>`;
+    foot.innerHTML=`<button class="btn primary" style="opacity:.45;pointer-events:none">次へ：プレビュー</button><button class="btn" onclick="csvLoad()">サンプルを読込</button><button class="btn ghost" onclick="closeDrawer()">閉じる</button>`;
+  }else if(CSV_STEP===1){      // ② プレビュー（生データ表示）
+    h+=`<div class="hint" style="margin:0 0 10px">${ic('check')}<span><b>店舗マスタ.csv</b> を読み込みました（全 ${CSV_ROWS.length} 行 / 文字コード：UTF-8 自動判定）。内容を確認してください。</span></div>`+
+      `<div class="tbl-wrap" style="margin:0"><div class="scroll"><table><thead><tr><th>店舗コード</th><th>店舗名</th><th>郵便番号</th><th>エリア</th></tr></thead><tbody>
+      ${CSV_ROWS.map(r=>`<tr class="row"><td class="mono">${r.code||'—'}</td><td><b>${r.name}</b></td><td class="mono">${r.zip||'—'}</td><td class="subtle">${r.area||'—'}</td></tr>`).join('')}
+      </tbody></table></div></div>`;
+    foot.innerHTML=`<button class="btn primary" onclick="csvGoto(2)">次へ：検証</button><button class="btn" onclick="csvGoto(0)">戻る</button><button class="btn ghost" onclick="closeDrawer()">閉じる</button>`;
+  }else if(CSV_STEP===2){      // ③ 検証（タグ＋重複の 更新/スキップ 選択）
+    const imp=CSV_ROWS.filter(r=>r.status!=='error').length;
+    const warn=CSV_ROWS.filter(r=>r.status==='warn').length;
+    const err=CSV_ROWS.filter(r=>r.status==='error').length;
+    const dup=CSV_ROWS.filter(r=>r.dup).length;
+    const tagFor=r=> r.status==='ok' ? '<span class="tag t-green">OK</span>'
+        : (r.issues||[]).map(m=>`<span class="tag ${r.status==='error'?'t-red':'t-amber'}">${m}</span>`).join(' ');
+    // 重複行の一括操作
+    const dupCtl = dup?`<div style="display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap">
+      <span class="subtle" style="font-size:12px;font-weight:600">重複 ${dup}件の既定動作：</span>
+      <select class="search" id="csvDupAll" onchange="csvDupAll(this.value)"><option value="update">更新（上書き）</option><option value="skip">スキップ</option></select></div>`:'';
+    h+=`<div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+      <span class="tag t-green nodot">取込可 ${imp}件</span>${warn?`<span class="tag t-amber nodot">警告 ${warn}件</span>`:''}${err?`<span class="tag t-red nodot">エラー ${err}件</span>`:''}${dup?`<span class="tag t-blue nodot">重複 ${dup}件</span>`:''}
+    </div>`+dupCtl+
+    `<div class="tbl-wrap" style="margin:0"><div class="scroll"><table><thead><tr><th>店舗コード</th><th>店舗名</th><th>検証</th><th>重複時</th></tr></thead><tbody>
+    ${CSV_ROWS.map((r,i)=>`<tr class="row"><td class="mono">${r.code||'—'}</td><td><b>${r.name}</b><div class="subtle" style="font-size:11px">${r.area||'—'}</div></td><td>${tagFor(r)}</td><td>${r.dup?`<select class="search" data-dup="${i}" onchange="csvDupRow(${i},this.value)" style="min-width:96px"><option value="update"${r.act!=='skip'?' selected':''}>更新</option><option value="skip"${r.act==='skip'?' selected':''}>スキップ</option></select>`:'<span class="subtle">—</span>'}</td></tr>`).join('')}
+    </tbody></table></div></div>
+    <div class="hint" style="margin:10px 0 0">${ic('info')}<span>エラー行はスキップ。重複行（店舗コード既存）は<b>更新／スキップ</b>を選択できます。エラー行のみ修正して再アップロード可能です。</span></div>`;
+    foot.innerHTML=`<button class="btn primary" onclick="csvGoto(3)">次へ：確定（${imp}件）</button><button class="btn" onclick="csvGoto(1)">戻る</button><button class="btn ghost" onclick="closeDrawer()">閉じる</button>`;
+  }else{                       // ④ 確定（バッチ進捗デモ）
+    const skip=CSV_ROWS.filter(r=>r.dup&&r.act==='skip').length;
+    const upd=CSV_ROWS.filter(r=>r.dup&&r.act!=='skip').length;
+    const err=CSV_ROWS.filter(r=>r.status==='error').length;
+    const total=CSV_LARGE;     // 大量件数を想定
+    h+=`<div class="hint" style="margin:0 0 12px">${ic('info')}<span>サンプル ${CSV_ROWS.length} 行に加え、本番想定の <b>${total.toLocaleString('ja-JP')}件</b> をバッチ処理します（新規追加・重複更新${skip?'、スキップ'+skip+'件':''}）。</span></div>
+      <div style="font-size:12.5px;font-weight:600;margin-bottom:6px" id="csvPgLbl">処理待ち…</div>
+      <div class="bar" style="margin-bottom:14px"><i id="csvPgBar" style="width:0%"></i></div>
+      <dl class="kv"><dt>新規追加</dt><dd id="csvKvNew">—</dd><dt>重複更新</dt><dd>${upd}件（＋一括）</dd><dt>スキップ</dt><dd>${skip}件</dd><dt>エラー</dt><dd>${err}件</dd></dl>`;
+    foot.innerHTML=`<button class="btn primary" id="csvRunBtn" onclick="csvRunBatch(${total})">取込を実行</button><button class="btn" onclick="csvGoto(2)">戻る</button><button class="btn ghost" onclick="closeDrawer()">閉じる</button>`;
+  }
+  body.innerHTML=h;
 }
+function csvGoto(step){ CSV_STEP=step; csvRender(); }
 const CSV_ROWS = [
   {name:'みなとフード 心斎橋店', code:'S-104021', zip:'542-0085', area:'大阪市中央区', status:'ok'},
   {name:'みなとフード 天王寺店', code:'S-104022', zip:'543-0055', area:'大阪市天王寺区', status:'ok'},
   {name:'みなとフード 京都四条店', code:'S-104023', zip:'600-8008', area:'京都市下京区', status:'ok'},
   {name:'みなとフード 三宮店', code:'S-104024', zip:'', area:'', status:'error', issues:['必須NG：郵便番号が未入力']},
-  {name:'みなとフード 西宮店', code:'S-104018', zip:'662-0911', area:'西宮市', status:'warn', issues:['重複：店舗コード既存（上書き更新）']},
+  {name:'みなとフード 西宮店', code:'S-104018', zip:'662-0911', area:'西宮市', status:'warn', dup:true, act:'update', issues:['重複：店舗コード既存']},
+  {name:'みなとフード 栄町店', code:'S-204411', zip:'541-0052', area:'大阪市中央区', status:'warn', dup:true, act:'update', issues:['重複：店舗コード既存']},
   {name:'南港フード 梅田店', code:'S-104025', zip:'530-0001', area:'大阪市北区', status:'warn', issues:['文字コード警告：Shift-JIS の可能性（要確認）']},
 ];
+// 重複行の動作切替（一括／個別）
+function csvDupAll(v){ CSV_ROWS.forEach(r=>{ if(r.dup) r.act=v; }); csvRender(); document.getElementById('csvDupAll').value=v; }
+function csvDupRow(i,v){ if(CSV_ROWS[i]) CSV_ROWS[i].act=v; }
 function csvLoad(){
-  const imp=CSV_ROWS.filter(r=>r.status!=='error').length;
-  const warn=CSV_ROWS.filter(r=>r.status==='warn').length;
-  const err=CSV_ROWS.filter(r=>r.status==='error').length;
-  const tagFor=r=> r.status==='ok' ? '<span class="tag t-green">OK</span>'
-      : (r.issues||[]).map(m=>`<span class="tag ${r.status==='error'?'t-red':'t-amber'}">${m}</span>`).join(' ');
-  document.getElementById('csvPreview').innerHTML = `
-    <div style="display:flex;gap:8px;margin-bottom:10px;flex-wrap:wrap">
-      <span class="tag t-green nodot">取込可 ${imp}件</span>${warn?`<span class="tag t-amber nodot">警告 ${warn}件</span>`:''}${err?`<span class="tag t-red nodot">エラー ${err}件</span>`:''}
-    </div>
-    <div class="tbl-wrap" style="margin:0"><div class="scroll"><table><thead><tr><th>店舗コード</th><th>店舗名</th><th>郵便番号</th><th>検証</th></tr></thead><tbody>
-    ${CSV_ROWS.map(r=>`<tr class="row"><td class="mono">${r.code||'—'}</td><td><b>${r.name}</b><div class="subtle" style="font-size:11px">${r.area||'—'}</div></td><td class="mono">${r.zip||'—'}</td><td>${tagFor(r)}</td></tr>`).join('')}
-    </tbody></table></div></div>
-    <div class="hint" style="margin:10px 0 0">${ic('info')}<span>エラー行はスキップ、警告行は取込（後で要確認）。エラー行のみ修正して再アップロードできます。</span></div>`;
-  const b=document.getElementById('csvImportBtn'); b.style.opacity='1'; b.style.pointerEvents='auto';
-  toast('CSVを検証しました（取込可 '+imp+'件 / エラー '+err+'件）');
+  CSV_STEP=1; csvRender();
+  toast('CSVを読み込みました（全 '+CSV_ROWS.length+' 行）');
 }
-function csvDoImport(){
-  const imp=CSV_ROWS.filter(r=>r.status!=='error').length;
+// バッチ進捗デモ：数千件を段階的に処理するアニメーション
+var _csvTimer=null;
+function csvRunBatch(total){
+  const btn=document.getElementById('csvRunBtn'); if(btn){ btn.style.opacity='.45'; btn.style.pointerEvents='none'; }
+  const bar=document.getElementById('csvPgBar'), lbl=document.getElementById('csvPgLbl'), kvNew=document.getElementById('csvKvNew');
+  const skip=CSV_ROWS.filter(r=>r.dup&&r.act==='skip').length;
   const err=CSV_ROWS.filter(r=>r.status==='error').length;
-  closeDrawer();
-  toast('店舗 '+imp+'件を取込しました'+(err?'（'+err+'件はエラーのためスキップ）':''));
+  let done=0; const tick=Math.max(1,Math.round(total/28));
+  clearInterval(_csvTimer);
+  _csvTimer=setInterval(()=>{
+    done=Math.min(total, done+tick+Math.floor(Math.random()*tick));
+    const pct=Math.round(done/total*100);
+    if(bar) bar.style.width=pct+'%';
+    if(lbl) lbl.textContent=total.toLocaleString('ja-JP')+'件中 '+done.toLocaleString('ja-JP')+'件 処理…（'+pct+'%）';
+    if(kvNew) kvNew.textContent=Math.max(0,done-skip).toLocaleString('ja-JP')+'件';
+    if(done>=total){
+      clearInterval(_csvTimer);
+      if(lbl) lbl.textContent='完了：'+total.toLocaleString('ja-JP')+'件を処理しました';
+      setTimeout(()=>{ closeDrawer(); toast('店舗 '+total.toLocaleString('ja-JP')+'件を取込しました'+(skip?'（重複'+skip+'件はスキップ）':'')+(err?' / エラー'+err+'件除外':'')); }, 500);
+    }
+  }, 70);
 }
 
 /* ============================================================
    請求先：宛先設定（各店舗宛／本社宛／代表店舗宛）+ 締日
    ============================================================ */
 const BILLTO_STORES = ['みなとフード 栄町店','みなとフード 梅田北口店','グルメテーブル 三宮店','関西モール 春日井'];
+// 宛先設定の変更履歴（請求先コード別・モック）。適用開始月から有効、既発行は不追溯。
+const BILLTO_HISTORY = {
+  'B-5001':[
+    {eff:'2026/04', chg:'宛先：各店舗宛 → <b>本社宛</b>', by:'佐藤'},
+    {eff:'2025/04', chg:'締日：20日 → 末日', by:'梶原'},
+  ],
+  'B-5002':[
+    {eff:'2026/01', chg:'宛先：本社宛 → <b>各店舗宛</b>', by:'鈴木'},
+  ],
+  'B-5010':[
+    {eff:'2026/05', chg:'代表店舗：三宮店 → <b>梅田北口店</b>', by:'梶原'},
+    {eff:'2025/10', chg:'宛先：本社宛 → <b>代表店舗宛</b>（代表：三宮店）', by:'梶原'},
+  ],
+  'B-5021':[
+    {eff:'2025/07', chg:'宛先：各店舗宛 → <b>本社宛</b>', by:'高橋'},
+  ],
+};
+function billtoHistoryHtml(code){
+  const rows=(BILLTO_HISTORY[code]||[]).map(h=>[h.eff, h.chg, h.by]);
+  if(!rows.length) return note('この請求先の変更履歴はまだありません。');
+  return tbl([{t:'適用日'},{t:'変更内容'},{t:'変更者'}],rows);
+}
 function openBillToForm(code){
   document.getElementById('drawerTitle').textContent='請求宛先の設定';
   document.getElementById('drawerSub').textContent=code+' · 宛先パターン／締日';
@@ -391,10 +502,13 @@ function openBillToForm(code){
         <div class="fld"><label>締日</label>${sel2(['末日','20日','15日','10日','25日'])}</div>
         <div class="fld"><label>適用開始月</label><input type="month" value="2026-07"></div>
       </div>
-      ${note('変更は次回締め分から適用されます。発行済みの請求書は再発行が必要です。','warn','warn')}
-    </div>`;
+      ${note('変更は<b>適用開始月</b>以降の締め分から適用されます。<b>発行済みの請求書は変更されません（不追溯）</b>。必要な場合のみ再発行してください。','warn','warn')}
+    </div>
+    <div class="divline"></div>
+    <div style="font-weight:700;font-size:13px;margin:2px 0 8px">${ic('clock')} 変更履歴 <span class="subtle" style="font-weight:500;font-size:11.5px">適用日／変更内容／変更者</span></div>
+    ${billtoHistoryHtml(code)}`;
   document.getElementById('drawerFoot').innerHTML =
-    `<button class="btn primary" onclick="toast('宛先設定を保存しました');closeDrawer()">設定を保存</button>
+    `<button class="btn primary" onclick="toast('宛先設定を保存しました（${esc(code)}・適用開始月から反映／既発行は不追溯）');closeDrawer()">設定を保存</button>
      <button class="btn ghost" onclick="closeDrawer()">キャンセル</button>`;
   showDrawer();
 }
@@ -410,26 +524,94 @@ const PAYMENTS = {
   'グルメテーブル中部FC': {billed:1078000, paid:1100000},
 };
 const yen = n => '¥'+Number(n).toLocaleString('ja-JP');
-function openPaymentForm(name){
-  const p = PAYMENTS[name] || {billed:0, paid:0};
-  const rest = p.billed - p.paid;
-  const restTxt = rest>0 ? `残額 ${yen(rest)}` : (rest<0 ? `過入金 ${yen(-rest)}` : '残額なし（消込可）');
-  document.getElementById('drawerTitle').textContent='入金消込';
-  document.getElementById('drawerSub').textContent=name;
+// 本社ごとの 1入金額 と 未消込（OPEN）請求書一覧。1入金→複数請求の充当（多対多）デモ用。
+const PAY_OPEN = {
+  'みなとフードHD':       {pay:2728000, invs:[{no:'INV-202605-0011',mon:'2026/05',amt:2543000},{no:'INV-202605-0021',mon:'2026/05',amt:185000}]},
+  '関西モール管理':       {pay:800000,  invs:[{no:'INV-202605-0012',mon:'2026/05',amt:620000},{no:'INV-202604-0008',mon:'2026/04',amt:498000},{no:'INV-202603-0005',mon:'2026/03',amt:180000}]},
+  '中央総合病院グループ': {pay:185000,  invs:[{no:'INV-202605-0021',mon:'2026/05',amt:185000},{no:'INV-202604-0017',mon:'2026/04',amt:96000}]},
+  'グルメテーブル中部FC': {pay:1100000, invs:[{no:'INV-202604-0009',mon:'2026/04',amt:1078000}]},
+};
+var ALLOC_CTX=null;   // {name, pay, invs:[{no,mon,amt}]}
+function openPaymentForm(name){ openAllocationForm(name); }
+// 入金充当フォーム：1件の入金を複数請求書へ配分（充当合計／残額／差額をライブ表示）
+function openAllocationForm(name){
+  const o = PAY_OPEN[name] || {pay:0, invs:[]};
+  ALLOC_CTX = {name, pay:o.pay, invs:o.invs};
+  document.getElementById('drawerTitle').textContent='入金充当（消込）';
+  document.getElementById('drawerSub').textContent=name+' · 1入金 → 複数請求へ配分';
+  // 既定：古い請求書から自動充当
+  let remain=o.pay; const init=o.invs.map(v=>{ const a=Math.min(remain, v.amt); remain-=a; return a; });
+  const rowsHtml=o.invs.map((v,i)=>`
+    <tr class="row">
+      <td><input type="checkbox" id="alChk${i}" ${init[i]>0?'checked':''} onchange="allocRecalc()"></td>
+      <td><b>${v.no}</b><div class="subtle" style="font-size:11px">${v.mon}</div></td>
+      <td class="num">${yen(v.amt)}</td>
+      <td class="num"><input id="alAmt${i}" class="search" style="width:120px;text-align:right" value="${init[i]}" oninput="allocRecalc()"></td>
+    </tr>`).join('');
   document.getElementById('drawerBody').innerHTML = `
-    <dl class="kv"><dt>請求額</dt><dd>${yen(p.billed)}</dd><dt>入金済</dt><dd>${yen(p.paid)}</dd><dt>差額</dt><dd>${rest===0?'¥0':(rest>0?'▲':'+')+yen(Math.abs(rest))}</dd></dl>
+    <dl class="kv"><dt>入金額</dt><dd><b>${yen(o.pay)}</b></dd><dt>入金日</dt><dd>2026/06/22</dd><dt>未消込 請求</dt><dd>${o.invs.length}件</dd></dl>
     <div class="divline"></div>
-    <div style="display:grid;gap:15px">
-      <div class="fld"><label>入金額<span class="req">*</span></label><input id="payAmt" placeholder="¥" value="${rest>0?rest:''}" oninput="payRest('${esc(name)}',this.value)"></div>
-      <div class="fld"><label>入金日</label><input type="date" value="2026-06-22"></div>
-      <div class="fld"><label>充当先（複数選択で合算消込）</label><select><option>自動充当（古い請求書から）</option><option>INV-202605-0011</option><option>INV-202605-0021</option></select></div>
+    <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+      <button class="btn" onclick="allocAuto()">${ic('refresh')}古い順に自動充当</button>
+      <button class="btn" onclick="allocClear()">クリア</button>
     </div>
-    ${note('1件の入金を複数請求書に合算消込できます。')}
-    <div class="hint" style="margin-top:10px">${ic('info')}<span id="payHint">${restTxt}</span></div>`;
+    <div class="tbl-wrap" style="margin:0"><div class="scroll"><table><thead><tr><th></th><th>請求書（未消込）</th><th class="num">請求額</th><th class="num">充当額</th></tr></thead>
+      <tbody>${rowsHtml}</tbody></table></div></div>
+    <div class="hint" style="margin:10px 0">${ic('info')}<span>各請求書に配分する金額を入力。<b>充当合計</b>が入金額を超えないよう調整します。1入金を複数請求に分けて充当できます（多対多）。</span></div>
+    <dl class="kv" style="grid-template-columns:120px 1fr">
+      <dt>充当合計</dt><dd id="alSum" style="font-weight:700">—</dd>
+      <dt>残額（未充当）</dt><dd id="alRemain">—</dd>
+      <dt>差額（過不足）</dt><dd id="alDiff">—</dd>
+    </dl>`;
   document.getElementById('drawerFoot').innerHTML =
-    `<button class="btn primary" onclick="payRest('${esc(name)}',document.getElementById('payAmt').value,true);closeDrawer()">消込を確定</button>
+    `<button class="btn primary" id="alSaveBtn" onclick="allocSave()">充当を確定</button>
      <button class="btn ghost" onclick="closeDrawer()">キャンセル</button>`;
   showDrawer();
+  allocRecalc();
+}
+function _alVal(i){ const el=document.getElementById('alAmt'+i); return el?(parseInt(String(el.value).replace(/[¥,]/g,''),10)||0):0; }
+function allocRecalc(){
+  if(!ALLOC_CTX) return;
+  let sum=0, alloc=0;
+  ALLOC_CTX.invs.forEach((v,i)=>{
+    const chk=document.getElementById('alChk'+i);
+    const amt=_alVal(i);
+    sum+=amt; if(chk&&chk.checked) alloc++;
+  });
+  const pay=ALLOC_CTX.pay;
+  const remain=pay-sum;          // 入金のうち未充当
+  const sumEl=document.getElementById('alSum'), reEl=document.getElementById('alRemain'), dfEl=document.getElementById('alDiff'), btn=document.getElementById('alSaveBtn');
+  if(sumEl) sumEl.textContent=yen(sum)+`（${alloc}件）`;
+  if(reEl){ reEl.innerHTML = remain>0?`<span class="num">${yen(remain)}</span>`:(remain<0?`<span class="num" style="color:var(--red)">超過 ${yen(-remain)}</span>`:'<span class="num">¥0（全額充当）</span>'); }
+  // 差額（過不足）：入金 − 充当。残債が残れば「残額」、過入金なら「+」
+  if(dfEl){
+    dfEl.innerHTML = remain===0?'<span class="num">¥0</span>'
+      : (remain>0?`<span class="num" style="color:var(--red)">残額 ▲${yen(remain)}</span>`
+                 :`<span class="num" style="color:var(--red)">過入金 +${yen(-remain)}</span>`);
+  }
+  if(btn){ const over=sum>pay; btn.style.opacity=over?'.45':'1'; btn.style.pointerEvents=over?'none':'auto'; }
+}
+function allocAuto(){
+  if(!ALLOC_CTX) return; let remain=ALLOC_CTX.pay;
+  ALLOC_CTX.invs.forEach((v,i)=>{ const a=Math.min(remain,v.amt); remain-=a;
+    const el=document.getElementById('alAmt'+i); if(el) el.value=a;
+    const chk=document.getElementById('alChk'+i); if(chk) chk.checked=a>0;
+  });
+  allocRecalc();
+}
+function allocClear(){
+  if(!ALLOC_CTX) return;
+  ALLOC_CTX.invs.forEach((v,i)=>{ const el=document.getElementById('alAmt'+i); if(el) el.value=0; const chk=document.getElementById('alChk'+i); if(chk) chk.checked=false; });
+  allocRecalc();
+}
+function allocSave(){
+  if(!ALLOC_CTX) return;
+  let sum=0, cnt=0;
+  ALLOC_CTX.invs.forEach((v,i)=>{ const a=_alVal(i); if(a>0){ sum+=a; cnt++; } });
+  const remain=ALLOC_CTX.pay-sum;
+  const diffTxt = remain===0?'差額なし（全額充当）':(remain>0?'残額 ▲'+yen(remain):'過入金 +'+yen(-remain));
+  closeDrawer();
+  toast('入金 '+yen(ALLOC_CTX.pay)+' を '+cnt+'件の請求に充当しました（'+diffTxt+'）');
 }
 function payRest(name,val,commit){
   const p = PAYMENTS[name] || {billed:0, paid:0};

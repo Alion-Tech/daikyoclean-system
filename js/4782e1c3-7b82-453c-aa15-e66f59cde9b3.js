@@ -98,7 +98,7 @@ function setPersona(p){
   document.getElementById('ppField').classList.toggle('on',p==='field');
   document.getElementById('devClock').textContent = p==='sales' ? '9:41' : '22:48';
   if(p==='sales'){ root('s_home'); }
-  else { resetReport(); root('f_home'); }
+  else { resetReport(); renderNetStatus(); root('f_home'); }
   closeSheet(); closeGen();
 }
 
@@ -208,10 +208,73 @@ function genAiReport(){
       <div class="arp-row"><div class="arp-l">次回</div><div class="arp-v" onclick="editArp(this)">6/5 みなと見積提出 ／ 6/10 中央病院G 役員提示</div></div>
       <div class="arp-row"><div class="arp-l">所感</div><div class="arp-v" onclick="editArp(this)">${memo}</div></div>
     </div>`;
+  renderAiReportStatus();
   go('s_aireport');
 }
-function editArp(el){ if(aiReport.status!=='draft')return; var v=prompt('編集',el.textContent); if(v!=null) el.textContent=v; }
-function sendAiReport(){ aiReport.status='submitted'; go('s_aidone'); }
+/* ---- AI日報 ステータス機械: draft / submitted / approved / returned ---- */
+const AI_STATUS={
+  draft:    { lbl:'下書き', cls:'aps-draft' },
+  submitted:{ lbl:'提出済', cls:'aps-submitted' },
+  approved: { lbl:'承認済', cls:'aps-approved' },
+  returned: { lbl:'差し戻し', cls:'aps-returned' },
+};
+function applyStatusBadge(el){
+  if(!el) return;
+  const s=AI_STATUS[aiReport.status]||AI_STATUS.draft;
+  el.className='arp-status '+s.cls;
+  el.textContent=s.lbl;
+}
+function arpEditable(){ return aiReport.status==='draft'||aiReport.status==='returned'; }
+/* s_aireport の状態表示と各値の編集可否（ロック表示）を更新 */
+function renderAiReportStatus(){
+  applyStatusBadge(document.getElementById('aiRepStatus'));
+  const editable=arpEditable();
+  document.querySelectorAll('#aiReportBody .arp-v').forEach(v=>{
+    v.classList.toggle('locked',!editable);
+  });
+}
+function editArp(el){
+  if(aiReport.status==='approved'){ toast('承認済みのため編集できません','warn'); return; }
+  if(aiReport.status==='submitted'){ toast('提出済みです（編集不可）','warn'); return; }
+  // draft / returned のみ編集可
+  var v=prompt('編集',el.textContent);
+  if(v!=null) el.textContent=v;
+}
+function sendAiReport(){
+  if(aiReport.status!=='draft'&&aiReport.status!=='returned'){ go('s_aidone'); return; }
+  const re=aiReport.status==='returned';
+  aiReport.status='submitted';
+  renderAiReportStatus();
+  renderAiDone();
+  toast(re?'修正版を再提出しました':'日報を提出しました');
+  go('s_aidone');
+}
+/* s_aidone の見た目を現在の状態に同期（バッジ/文言/上長ボタン/フッター） */
+function renderAiDone(){
+  applyStatusBadge(document.getElementById('aiDoneBadge'));
+  const t=document.getElementById('aiDoneT');
+  const msg=document.getElementById('aiDoneMsg');
+  const sup=document.getElementById('aiSupBox');
+  const foot=document.getElementById('aiDoneFoot');
+  const st=aiReport.status;
+  if(t) t.textContent = st==='approved' ? 'AI日報 承認されました'
+                      : st==='returned' ? 'AI日報 差し戻し'
+                      : 'AI日報 提出完了';
+  if(msg) msg.innerHTML = st==='approved' ? '上長が内容を承認しました。<br>以降は編集できません（確定）。'
+                       : st==='returned' ? '上長から差し戻されました。<br>修正して再提出してください。'
+                       : '上長の管理画面（営業活動 ›<br>AI日報）に届きました';
+  // 上長デモ操作は「提出済」のときだけ表示
+  if(sup) sup.style.display = st==='submitted' ? 'block' : 'none';
+  // フッター：差し戻し時は「報告を修正する」、それ以外はホームへ
+  if(foot) foot.innerHTML = st==='returned'
+    ? '<button class="bigbtn tap" onclick="reopenAiReport()"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg>報告を修正する</button>'
+    : '<button class="bigbtn tap" onclick="root(\'s_home\')">ホームへ戻る</button>';
+}
+/* 上長（管理画面）デモ操作 */
+function supApprove(){ aiReport.status='approved'; renderAiReportStatus(); renderAiDone(); toast('上長が日報を承認しました'); }
+function supReturn(){ aiReport.status='returned'; renderAiReportStatus(); renderAiDone(); toast('上長が日報を差し戻しました','warn'); }
+/* 差し戻し → プレビューに戻って再編集 */
+function reopenAiReport(){ renderAiReportStatus(); go('s_aireport'); toast('差し戻し：内容を修正して再提出してください'); }
 
 function startRecord(){
   rec.store=''; rec.type='';
@@ -232,6 +295,57 @@ function saveRecord(){
   root('s_home');
   toast('活動を記録しました（'+rec.type+'）');
 }
+
+/* ============ オフライン作業報告キュー（PWA） ============ */
+const RQ_KEY='dk_report_queue';
+let dkOfflineDemo=false;                 // 「オフライン体験」デモトグル
+function isOffline(){ return dkOfflineDemo || !navigator.onLine; }
+function getReportQueue(){
+  try{ return JSON.parse(localStorage.getItem(RQ_KEY)||'[]'); }catch(e){ return []; }
+}
+function setReportQueue(q){
+  try{ localStorage.setItem(RQ_KEY, JSON.stringify(q)); }catch(e){}
+}
+/* ヘッダーの接続状態ピル・未送信バッジ・トグル表示を同期 */
+function renderNetStatus(){
+  const off=isOffline();
+  const pill=document.getElementById('netPill');
+  if(pill){ pill.classList.toggle('off',off); pill.textContent=off?'オフライン':'オンライン'; }
+  const sw=document.getElementById('offSw'); if(sw) sw.classList.toggle('on',dkOfflineDemo);
+  const q=getReportQueue();
+  const badge=document.getElementById('queueBadge');
+  const cnt=document.getElementById('queueCnt');
+  if(cnt) cnt.textContent=q.length;
+  if(badge) badge.classList.toggle('on',q.length>0);
+}
+/* キューに作業報告を積む */
+function queueReport(){
+  const q=getReportQueue();
+  q.push({ name:report.name, work:report.work, op:report.op, sludge:report.sludge,
+           at:new Date().toISOString() });
+  setReportQueue(q);
+  renderNetStatus();
+}
+/* オンライン復帰時：キューを自動同期 */
+function flushReportQueue(){
+  if(isOffline()){ toast('オフライン中です。オンライン復帰で自動送信します','warn'); return; }
+  const q=getReportQueue();
+  if(!q.length){ renderNetStatus(); return; }
+  const n=q.length;
+  setReportQueue([]);
+  renderNetStatus();
+  toast('オンライン復帰：作業報告 '+n+'件 を自動同期しました');
+}
+/* デモトグル：ON=圏外擬似 / OFF=復帰してキュー送信 */
+function toggleOfflineDemo(){
+  dkOfflineDemo=!dkOfflineDemo;
+  renderNetStatus();
+  if(dkOfflineDemo){ toast('オフライン体験 ON：圏外を擬似再現します'); }
+  else { toast('オフライン体験 OFF：オンラインに復帰しました'); flushReportQueue(); }
+}
+/* 実機の online/offline イベント */
+window.addEventListener('online', function(){ renderNetStatus(); flushReportQueue(); });
+window.addEventListener('offline', function(){ renderNetStatus(); toast('オフラインになりました。作業報告は端末に保存されます','warn'); });
 
 /* ============ 現場フロー ============ */
 function resetReport(){
@@ -309,6 +423,13 @@ function trySubmit(){
   document.getElementById('doneSub').textContent = report.name+' · '+report.op;
   document.getElementById('doneSludge').textContent = report.sludge;
   document.getElementById('jwnet').textContent = genJwnet();
+  if(isOffline()){
+    // オフライン：端末に保存し、復帰時に自動送信
+    queueReport();
+    toast('オフライン保存：オンライン復帰時に自動送信します','warn');
+  } else {
+    toast('完了報告を送信しました');
+  }
   go('f_done');
 }
 function nextJob(){ root('f_home'); toast('次の作業を選んでください'); }
@@ -367,3 +488,4 @@ function toast(msg,kind){
 renderLists();
 renderTabs();
 updateSubmit();
+renderNetStatus();

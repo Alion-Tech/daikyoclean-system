@@ -113,25 +113,28 @@ const NOTIFS = [
 ];
 
 /* ---- 権限モデル（権限管理 → 権限制御 / ユーザーメニューの権限プレビュー） ---- */
+// ロール体系：管理者 / マネージャ / 営業 / 事務（＋現場）。key は既存の索引互換のため不変、表示名のみ整合。
 const ROLES = [
-  {key:'sales', name:'営業権限', users:8,  color:'t-blue',  desc:'顧客・契約・営業活動を中心に編集可能。請求/売上は参照のみ。'},
-  {key:'field', name:'現場権限', users:21, color:'t-teal',  desc:'作業計画・実行・報告・配車を編集。請求/売上には触れない。'},
-  {key:'fin',   name:'財務権限', users:5,  color:'t-green', desc:'請求・売上をフル管理。現場系は参照のみ。'},
-  {key:'admin', name:'管理者権限', users:3, color:'t-red',  desc:'全モジュールへのフルアクセス。権限管理を含む。'},
+  {key:'admin', name:'管理者', users:3,  color:'t-red',  desc:'全モジュールへのフルアクセス。権限管理・連携設定を含む。'},
+  {key:'mgr',   name:'マネージャ', users:6, color:'t-purple', desc:'担当部門の承認・進捗管理。請求/売上は参照、契約・営業・作業を編集。'},
+  {key:'sales', name:'営業', users:8,  color:'t-blue',  desc:'顧客・契約・営業活動を中心に編集可能。請求/売上は参照のみ。<b>自担当顧客のみ</b>閲覧（行レベル）。'},
+  {key:'fin',   name:'事務', users:5,  color:'t-green', desc:'請求・売上・入金消込をフル管理。現場系は参照のみ。'},
+  {key:'field', name:'現場', users:21, color:'t-teal',  desc:'作業計画・実行・報告・配車を編集。請求/売上には触れない。'},
 ];
 // 末尾に「入金・消込」を追加（NAVと対応しないサブ資源。既存indexは不変）
 const PERM_MODS = ['顧客・店舗','契約管理','営業活動','作業計画','作業実行・報告','配車・車両','作業報告書','請求管理','売上管理','BI分析','作業マスタ','外部連携','権限管理','共通・ログ','入金・消込'];
 // F=フル A=承認 E=参照・編集 R=参照 N=なし
 const PERM = {
-  sales:['E','E','F','R','R','R','R','R','R','R','R','N','N','R','R'],
-  field:['R','N','N','E','F','E','F','N','N','R','R','N','N','R','N'],
-  fin:  ['R','R','N','N','R','N','R','F','F','R','E','R','N','R','F'],
   admin:['F','F','F','F','F','F','F','F','F','F','F','F','F','F','F'],
+  mgr:  ['E','F','F','A','A','E','E','R','R','R','E','R','N','R','R'],
+  sales:['E','E','F','R','R','R','R','R','R','R','R','N','N','R','R'],
+  fin:  ['R','R','N','N','R','N','R','F','F','R','E','R','N','R','F'],
+  field:['R','N','N','E','F','E','F','N','N','R','R','N','N','R','N'],
 };
 const PERM_OPT = {F:'フル',A:'承認',E:'参照・編集',R:'参照',N:'なし'};
 // 機微リソースの細粒度権限（閲覧／編集／承認）。ロール×リソースで保持。
 const PERM_FINE = {
-  '請求管理':  {sales:['R','N','N'], field:['N','N','N'], fin:['F','F','A'], admin:['F','F','A']},
-  '売上管理':  {sales:['R','N','N'], field:['N','N','N'], fin:['F','F','A'], admin:['F','F','A']},
-  '顧客・店舗':{sales:['F','E','N'], field:['R','N','N'], fin:['R','N','N'], admin:['F','F','A']},
+  '請求管理':  {sales:['R','N','N'], mgr:['R','N','N'], field:['N','N','N'], fin:['F','F','A'], admin:['F','F','A']},
+  '売上管理':  {sales:['R','N','N'], mgr:['R','N','N'], field:['N','N','N'], fin:['F','F','A'], admin:['F','F','A']},
+  '顧客・店舗':{sales:['F','E','N'], mgr:['E','E','N'], field:['R','N','N'], fin:['R','N','N'], admin:['F','F','A']},
 };

@@ -192,7 +192,15 @@ function scr_cust_billto(){
         <tr class="row"><td>INV-202605-0021</td><td class="num">¥185,000</td><td>${tag('t-green','消込済')}</td></tr>
       </tbody></table></div></div>`
     )}
-  </div>`;
+  </div>`+
+  panel(`${ic('clock','pic')}宛先・代表店舗の変更履歴 <span class="sub">適用開始月から反映／既発行は不追溯</span>`,
+    tbl([{t:'適用日'},{t:'請求先'},{t:'変更内容'},{t:'変更者'}],[
+      ['2026/05','<b>グルメテーブル中部FC</b> <span class="code">B-5010</span>','代表店舗：三宮店 → <b>梅田北口店</b>','梶原'],
+      ['2026/04','<b>みなとフード 本部経理</b> <span class="code">B-5001</span>','宛先：各店舗宛 → <b>本社宛</b>','佐藤'],
+      ['2026/01','<b>関西モール 管理本部</b> <span class="code">B-5002</span>','宛先：本社宛 → <b>各店舗宛</b>','鈴木'],
+      ['2025/10','<b>グルメテーブル中部FC</b> <span class="code">B-5010</span>','宛先：本社宛 → <b>代表店舗宛</b>（代表：三宮店）','梶原'],
+    ])+
+    note('宛先・代表店舗・締日の変更は<b>適用開始月</b>以降の締め分から反映されます。<b>発行済みの請求書には遡及しません（不追溯）</b>。各行の「宛先設定」から変更でき、履歴は本表に追記されます。','warn','warn'));
 }
 function scr_cust_mgmt(){
   return toolbar(searchBox()+`<span class="spacer"></span>`+btnNew('管理会社登録'))+
@@ -236,6 +244,7 @@ const TXN_HISTORY = [
 function scr_cust_history(){
   const rows = TXN_HISTORY.map(h=>[h.date, tag(h.cls,h.kind), `<b>${h.cust}</b>`, h.title, h.by, `<span class="num">${h.amt}</span>`]);
   return note('顧客ごとの<b>過去取引履歴</b>を一元保存。商談・請求・契約・対応をまたいでキーワード検索でき、営業スマホアプリにも同じ履歴が表示されます。')+
+  note('履歴の<b>保存年限は7年</b>（電子帳簿・契約関連に準拠）。旧システムの過去データは<b>CSV移行</b>で取り込めます（コード突合のうえ重複排除）。','eco','clock')+
   toolbar(
     `<div style="position:relative;flex:1;max-width:340px"><input id="txnSearch" class="search grow" style="width:100%;padding-left:34px" placeholder="顧客名・内容・担当でキーワード検索…" oninput="filterTxn(this.value)"><span style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--faint)">${ic('search')}</span></div>`+
     `<div class="segmented" id="txnKind"><span class="seg active" onclick="txnKind('すべて',this)">すべて</span><span class="seg" onclick="txnKind('商談',this)">商談</span><span class="seg" onclick="txnKind('見積',this)">見積</span><span class="seg" onclick="txnKind('請求',this)">請求</span><span class="seg" onclick="txnKind('入金',this)">入金</span><span class="seg" onclick="txnKind('契約',this)">契約</span><span class="seg" onclick="txnKind('対応',this)">対応</span><span class="seg" onclick="txnKind('クレーム',this)">クレーム</span></div>`+
@@ -243,6 +252,7 @@ function scr_cust_history(){
     sel(['期間：すべて','今月','先月','今年度']).replace('<select class="search">','<select class="search" onchange="txnFilter(\'period\',this.value)">')+
     sel(['金額：すべて','〜10万','10〜100万','100万〜']).replace('<select class="search">','<select class="search" onchange="txnFilter(\'amt\',this.value)">')+
     sel(['担当：すべて','梶原','佐藤','鈴木','高橋','山田']).replace('<select class="search">','<select class="search" onchange="txnFilter(\'by\',this.value)">')+
+    `<button class="btn" onclick="toast('旧システムからのCSV移行を開始します（コード突合・重複排除のうえ取込）')">${ic('upload')}旧システム移行</button>`+
     btnCsv)+
   `<div id="txnWrap">`+tbl([{t:'日付'},{t:'種別'},{t:'顧客'},{t:'内容'},{t:'担当'},{t:'金額',num:true}],rows,{click:true})+`</div>`;
 }

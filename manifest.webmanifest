@@ -1,0 +1,21 @@
+{
+  "name": "ダイキョウクリーン 現場アプリ",
+  "short_name": "ダイキョウ現場",
+  "description": "株式会社ダイキョウクリーン 営業・現場向けモバイルアプリ。オフラインでも作業報告を入力できます。",
+  "lang": "ja",
+  "dir": "ltr",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "ops.html",
+  "scope": "./",
+  "background_color": "#0c2930",
+  "theme_color": "#0c2930",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "any",
+      "purpose": "any maskable"
+    }
+  ]
+}

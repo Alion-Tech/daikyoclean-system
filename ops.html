@@ -4,6 +4,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ダイキョウクリーン アプリ（操作版）</title>
 
+<!-- PWA -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0c2930">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="ダイキョウ現場">
+
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
 <style>@font-face {
@@ -5376,6 +5385,38 @@ body{
 .arp-l{font-size:11px;font-weight:800;color:var(--muted)}
 .arp-v{font-size:12.8px;line-height:1.55}
 .arp-v b{font-weight:700}
+.arp-v.locked{opacity:.92;cursor:default}
+
+/* ---- AI日報 ステータスバッジ（4状態） ---- */
+.arp-status{display:inline-flex;align-items:center;gap:5px;padding:3px 11px;border-radius:20px;font-size:11px;font-weight:800;letter-spacing:.2px}
+.arp-status::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.aps-draft{background:#eef1f3;color:#5a6f78}
+.aps-submitted{background:var(--amber-soft);color:#9a6210}
+.aps-approved{background:var(--eco-soft);color:#15784f}
+.aps-returned{background:var(--red-soft);color:#a8352d}
+
+/* ---- 上長デモ操作（承認/差し戻し） ---- */
+.sup-row{display:flex;gap:9px;width:100%;margin-top:14px}
+.sup-btn{flex:1;border-radius:12px;border:1.6px solid;padding:12px 8px;font-size:13px;font-weight:800;background:#fff;display:flex;align-items:center;justify-content:center;gap:6px;cursor:pointer}
+.sup-ok{border-color:var(--eco);color:#15784f}
+.sup-rt{border-color:var(--red);color:#a8352d}
+.sup-cap{font-size:10.5px;color:var(--muted);font-weight:700;text-align:center;width:100%;margin-top:12px}
+
+/* ---- オフライン: ステータス表示 / デモトグル / 保留バッジ ---- */
+.net-pill{display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:20px;font-size:10px;font-weight:800;background:rgba(255,255,255,.16);color:#cfe9ee}
+.net-pill::before{content:"";width:7px;height:7px;border-radius:50%;background:#3fe08a;flex:none;box-shadow:0 0 0 2px rgba(63,224,138,.25)}
+.net-pill.off{background:rgba(201,130,26,.28);color:#ffe6bf}
+.net-pill.off::before{background:#ffb53d;box-shadow:0 0 0 2px rgba(255,181,61,.25)}
+.off-toggle{display:flex;align-items:center;justify-content:space-between;gap:10px;background:rgba(255,255,255,.10);border:1px solid rgba(255,255,255,.16);border-radius:12px;padding:9px 12px;margin-top:11px;color:#fff}
+.off-toggle .ot-l{font-size:11.5px;font-weight:700;line-height:1.3}
+.off-toggle .ot-l span{display:block;font-size:10px;color:#9fc6cf;font-weight:600;margin-top:1px}
+.ot-sw{width:42px;height:24px;border-radius:20px;background:rgba(255,255,255,.28);position:relative;flex:none;transition:background .18s;cursor:pointer}
+.ot-sw::after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;transition:transform .18s}
+.ot-sw.on{background:var(--amber)}
+.ot-sw.on::after{transform:translateX(18px)}
+.queue-badge{display:none;align-items:center;gap:7px;background:var(--amber-soft);border:1px solid #f0dcb6;color:#8a5e15;border-radius:11px;padding:9px 11px;font-size:11px;font-weight:700;margin-top:11px;line-height:1.4}
+.queue-badge.on{display:flex}
+.queue-badge .qb-n{display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0 6px;border-radius:20px;background:var(--amber);color:#fff;font-size:11px;font-weight:800;flex:none}
 </style>
 </head>
 <body>
@@ -5514,6 +5555,7 @@ body{
         <section class="screen" id="f_home" data-state="hidden">
           <div class="ah eco"><div class="ah-row">
             <div><div class="ah-t">夜間班 · 山田さん</div><div class="ah-s">本日 8件 · 大阪南部エリア</div></div>
+            <span class="net-pill" id="netPill">オンライン</span>
             <div class="ah-av">山</div>
           </div></div>
           <div class="sc">
@@ -5521,6 +5563,11 @@ body{
               <div class="k"><div class="kl">完了</div><div class="kv">5<span style="font-size:11px;color:var(--muted)">/8</span></div></div>
               <div class="k"><div class="kl">残り</div><div class="kv">3<span style="font-size:11px;color:var(--muted)">件</span></div></div>
             </div>
+            <div class="off-toggle">
+              <div class="ot-l">オフライン体験（デモ）<span>ONにすると圏外を擬似再現。報告は端末に保存され、OFFで自動同期します。</span></div>
+              <div class="ot-sw" id="offSw" onclick="toggleOfflineDemo()"></div>
+            </div>
+            <div class="queue-badge" id="queueBadge" onclick="flushReportQueue()"><span class="qb-n" id="queueCnt">0</span><span>未送信の作業報告（オンライン復帰で自動送信／タップで今すぐ送信）</span></div>
             <div class="mlabel">本日の作業 — タップで完了報告</div>
             <div id="jobList"></div>
             <div class="mnote teal"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M12 16v-4M12 8h.01"></path></svg>作業をタップ → 写真を撮って完了報告。電波が弱くても入力できます。</div>
@@ -5713,6 +5760,7 @@ body{
           </div></div>
           <div class="sc">
             <div class="ai-row" style="margin-top:4px"><span class="ai-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9z"></path></svg>AI</span>活動3件から標準フォーマットで生成しました</div>
+            <div style="display:flex;align-items:center;gap:8px;margin:10px 0 2px"><span style="font-size:11px;font-weight:800;color:var(--muted)">状態</span><span class="arp-status aps-draft" id="aiRepStatus">下書き</span></div>
             <div id="aiReportBody"></div>
             <button class="bigbtn tap" style="background:#fff;color:var(--brand-700);border:1.6px solid var(--brand);margin-top:10px" onclick="toast('日報PDFを出力しました')">
               <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path></svg>PDFを出力</button>
@@ -5728,10 +5776,10 @@ body{
             <div><div class="ah-t">日報を提出しました</div><div class="ah-s">2026/05/29 · 梶原 健司</div></div>
           </div></div>
           <div class="done-wrap">
-            <div class="done-ring"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></div>
-            <div class="done-t">AI日報 提出完了</div>
-            <div style="margin:8px 0 2px"><span class="mtag mt-amber" id="aiDoneBadge">提出済み・承認待ち</span></div>
-            <div class="done-s">上長の管理画面（営業活動 ›<br>AI日報）に届きました</div>
+            <div class="done-ring" id="aiDoneRing"><svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg></div>
+            <div class="done-t" id="aiDoneT">AI日報 提出完了</div>
+            <div style="margin:8px 0 2px"><span class="arp-status aps-submitted" id="aiDoneBadge">提出済</span></div>
+            <div class="done-s" id="aiDoneMsg">上長の管理画面（営業活動 ›<br>AI日報）に届きました</div>
             <div class="mcard" style="width:100%;margin-top:14px;text-align:left">
               <div class="mlabel">提出内容</div>
               <ul class="mtl" style="margin-top:9px">
@@ -5740,8 +5788,16 @@ body{
                 <li class="amber"><div class="tt">次回</div><div class="tx">6/5 みなと見積提出 / 6/10 中央病院G 役員提示</div></li>
               </ul>
             </div>
+            <!-- 上長（管理画面）操作のデモ：承認 / 差し戻し -->
+            <div id="aiSupBox" style="width:100%">
+              <div class="sup-cap">— デモ：上長（管理画面）の操作を再現 —</div>
+              <div class="sup-row">
+                <button class="sup-btn sup-ok tap" onclick="supApprove()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>（上長）承認</button>
+                <button class="sup-btn sup-rt tap" onclick="supReturn()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l-4-4 4-4M5 10h11a4 4 0 0 1 0 8h-1"></path></svg>（上長）差し戻し</button>
+              </div>
+            </div>
           </div>
-          <div class="sc-foot"><button class="bigbtn tap" onclick="root('s_home')">ホームへ戻る</button></div>
+          <div class="sc-foot" id="aiDoneFoot"><button class="bigbtn tap" onclick="root('s_home')">ホームへ戻る</button></div>
         </section>
 
       </div><!-- /vp -->
@@ -5779,6 +5835,18 @@ body{
 
 <script src="js/9266091e-31ee-4869-8666-cd44c3eb4dad.js"></script>
 <script src="js/4782e1c3-7b82-453c-aa15-e66f59cde9b3.js"></script>
+<!-- PWA: Service Worker 登録（フェイルセーフ） -->
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () {
+      try {
+        navigator.serviceWorker.register('sw.js').catch(function (e) {
+          console.warn('SW register failed', e);
+        });
+      } catch (e) { /* file:// 等では無視 */ }
+    });
+  }
+</script>
 
 
 </body></html>
