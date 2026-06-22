@@ -150,6 +150,11 @@ function bindSegmented(){
 
 /* ---- Drawer (detail / form / document) ---- */
 function showDrawer(){ document.getElementById('drawerMask').classList.add('open'); document.getElementById('drawer').classList.add('open'); }
+/* 行クリックの汎用ドロワー：セル内のリンク/ボタン/入力/select をクリックした場合は、その要素自身のハンドラに任せて汎用ドロワーは開かない（二重発火・上書き防止） */
+function rowDrawer(e,row){
+  if(e&&e.target&&e.target.closest('.lnk,.btn,select,input,a,button')) return;
+  openDrawer(row);
+}
 function rowTitle(row){ if(!row) return ''; const c=[...row.querySelectorAll('td')].map(td=>td.innerText.trim()); return c[1]||c[0]||''; }
 
 function openDrawer(rowEl){
@@ -572,13 +577,16 @@ const PAY_OPEN = {
 var ALLOC_CTX=null;   // {name, pay, invs:[{no,mon,amt}]}
 function openPaymentForm(name){ openAllocationForm(name); }
 // 入金充当フォーム：1件の入金を複数請求書へ配分（充当合計／残額／差額をライブ表示）
-function openAllocationForm(name){
+// opt.register=true：未入金（入金待ち）行からの新規入金登録。入金額¥0・充当なしの空状態で開始。
+function openAllocationForm(name,opt={}){
+  const reg = !!opt.register;
   const o = PAY_OPEN[name] || {pay:0, invs:[]};
-  ALLOC_CTX = {name, pay:o.pay, invs:o.invs};
-  document.getElementById('drawerTitle').textContent='入金充当（消込）';
-  document.getElementById('drawerSub').textContent=name+' · 1入金 → 複数請求へ配分';
-  // 既定：古い請求書から自動充当
-  let remain=o.pay; const init=o.invs.map(v=>{ const a=Math.min(remain, v.amt); remain-=a; return a; });
+  const pay = reg ? 0 : o.pay;                 // 登録モードは入金額を空（¥0）から
+  ALLOC_CTX = {name, pay, invs:o.invs, register:reg};
+  document.getElementById('drawerTitle').textContent = reg ? '入金登録' : '入金充当（消込）';
+  document.getElementById('drawerSub').textContent = name + (reg ? ' · 新規入金を登録' : ' · 1入金 → 複数請求へ配分');
+  // 既定：消込は古い請求書から自動充当／登録モードは充当なし（空）で開始
+  let remain=pay; const init=o.invs.map(v=>{ if(reg) return 0; const a=Math.min(remain, v.amt); remain-=a; return a; });
   const rowsHtml=o.invs.map((v,i)=>`
     <tr class="row">
       <td><input type="checkbox" id="alChk${i}" ${init[i]>0?'checked':''} onchange="allocRecalc()"></td>
@@ -586,11 +594,15 @@ function openAllocationForm(name){
       <td class="num">${yen(v.amt)}</td>
       <td class="num"><input id="alAmt${i}" class="search" style="width:120px;text-align:right" value="${init[i]}" oninput="allocRecalc()"></td>
     </tr>`).join('');
+  const payCell = reg
+    ? `<input id="alPay" class="search" style="width:140px;text-align:right" placeholder="¥0" value="" oninput="allocSetPay(this.value)">`
+    : `<b>${yen(pay)}</b>`;
   document.getElementById('drawerBody').innerHTML = `
-    <dl class="kv"><dt>入金額</dt><dd><b>${yen(o.pay)}</b></dd><dt>入金日</dt><dd>2026/06/22</dd><dt>未消込 請求</dt><dd>${o.invs.length}件</dd></dl>
+    ${reg?note('未入金（入金待ち）の請求です。実際の入金額を入力し、対象請求へ充当してください。','warn','warn'):''}
+    <dl class="kv"><dt>入金額</dt><dd>${payCell}</dd><dt>入金日</dt><dd>2026/06/22</dd><dt>未消込 請求</dt><dd>${o.invs.length}件</dd></dl>
     <div class="divline"></div>
     <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
-      <button class="btn" onclick="allocAuto()">${ic('refresh')}古い順に自動充当</button>
+      <button class="btn" onclick="allocAuto()">${ic('refresh')}${reg?'入金額を古い順に充当':'古い順に自動充当'}</button>
       <button class="btn" onclick="allocClear()">クリア</button>
     </div>
     <div class="tbl-wrap" style="margin:0"><div class="scroll"><table><thead><tr><th></th><th>請求書（未消込）</th><th class="num">請求額</th><th class="num">充当額</th></tr></thead>
@@ -602,9 +614,15 @@ function openAllocationForm(name){
       <dt>差額（過不足）</dt><dd id="alDiff">—</dd>
     </dl>`;
   document.getElementById('drawerFoot').innerHTML =
-    `<button class="btn primary" id="alSaveBtn" onclick="allocSave()">充当を確定</button>
+    `<button class="btn primary" id="alSaveBtn" onclick="allocSave()">${reg?'入金を登録':'充当を確定'}</button>
      <button class="btn ghost" onclick="closeDrawer()">キャンセル</button>`;
   showDrawer();
+  allocRecalc();
+}
+// 登録モード：入金額の手入力を ALLOC_CTX に反映し、充当合計／残額を再計算
+function allocSetPay(v){
+  if(!ALLOC_CTX) return;
+  ALLOC_CTX.pay = parseInt(String(v).replace(/[¥,]/g,''),10)||0;
   allocRecalc();
 }
 function _alVal(i){ const el=document.getElementById('alAmt'+i); return el?(parseInt(String(el.value).replace(/[¥,]/g,''),10)||0):0; }
@@ -840,7 +858,7 @@ function barSimple(id,labels,data,color){
 function initCharts(){
   const m=state.mod, t=state.tab;
   if(m==='dashboard'){ lineYoY('d1'); doughnutWork('d2'); barHCust('d3'); barArea('d4'); }
-  if(m==='sales' && t===3) lineYoY('sa1');
+  if(m==='sales' && t===3) barSimple('sa1', months, [1.9,2.0,2.1,1.8,2.0,2.2,2.4,1.7,1.9,2.1,2.0,2.1], PAL.brand); // 顧客（みなとフードHD）スケール：月商≈¥2M、年商≈¥24.8M
   if(m==='revenue'){ if(t===1){ barSimple('rv1',months,[34,35,37,34,36,38,42,31,33,37,38,38.6]); barSimple('rvy1',['2022','2023','2024','2025','2026'],[362,388,402,412,77],PAL.eco); } if(t===2) barHCust('rv2'); if(t===3) doughnutWork('rv3'); }
   if(m==='bi'){
     if(t===0){ lineYoY('bm1'); doughnutWork('bm2'); barHCust('bm3'); barArea('bm4'); }

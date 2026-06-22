@@ -5283,7 +5283,7 @@ body{
 .bigbtn{width:100%;border:none;border-radius:14px;padding:16px;font-size:15px;font-weight:700;font-family:inherit;color:#fff;background:var(--brand);display:flex;align-items:center;justify-content:center;gap:9px;cursor:pointer;transition:.14s}
 .bigbtn:active{transform:scale(.99)}
 .bigbtn.eco{background:var(--eco)}
-.bigbtn.disabled{background:#cdd9dc;color:#85a0a8;cursor:not-allowed}
+.bigbtn.disabled{background:#cdd9dc;color:var(--ink-2);cursor:not-allowed}
 .bigbtn.err{background:var(--red-soft);color:var(--red);border:1.6px solid #f0c8c4}
 
 /* photo capture grid (interactive) */
@@ -5605,8 +5605,8 @@ body{
           <div class="sc">
             <div class="mlabel">作業写真 <span class="ai-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9z"></path></svg>AI自動分類</span></div>
             <div class="cap-grid">
-              <div class="cap filled" data-stage="前"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg><span class="cls">作業前</span></div>
-              <div class="cap filled" data-stage="中"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg><span class="cls">作業中</span></div>
+              <div class="cap filled tap" data-stage="前" onclick="toast('作業前の写真を表示')"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg><span class="cls">作業前</span></div>
+              <div class="cap filled tap" data-stage="中" onclick="toast('作業中の写真を表示')"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg><span class="cls">作業中</span></div>
               <div class="cap req-empty tap" id="capAfter" data-stage="後" onclick="capture(this)"><span class="req-x">＊</span><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>作業後<br>を撮影</div>
             </div>
             <div class="ai-row" id="aiRow" style="display:none"><span class="ai-badge"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h9l-1 8 10-12h-9z"></path></svg>AI</span><span id="aiMsg">写真を「作業後」に自動分類しました</span></div>
@@ -5730,7 +5730,7 @@ body{
               <div style="font-weight:800;font-size:15px;color:#8a5e15;margin-top:4px;letter-spacing:.5px" id="rdJwnet">000-1234-5678-9012</div>
             </div>
           </div>
-          <div class="sc-foot"><button class="bigbtn tap" onclick="toast('報告書PDFを開きます')"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path></svg>報告書PDFを表示</button></div>
+          <div class="sc-foot"><button class="bigbtn tap" style="background:#fff;color:var(--eco);border:1.6px solid var(--eco)" onclick="toast('報告書PDFを開きます')"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6"></path></svg>報告書PDFを表示</button></div>
         </section>
 
         <!-- ============ 営業：取引履歴（全件・検索） ============ -->
@@ -5801,6 +5801,14 @@ body{
             <div class="done-t" id="aiDoneT">AI日報 提出完了</div>
             <div style="margin:8px 0 2px"><span class="arp-status aps-submitted" id="aiDoneBadge">提出済</span></div>
             <div class="done-s" id="aiDoneMsg">上長の管理画面（営業活動 ›<br>AI日報）に届きました</div>
+            <!-- 上長（管理画面）操作のデモ：承認 / 差し戻し（375px でも折りたたまれず見えるよう、提出内容より上に配置） -->
+            <div id="aiSupBox" style="width:100%">
+              <div class="sup-cap">— デモ：上長（管理画面）の操作を再現 —</div>
+              <div class="sup-row">
+                <button class="sup-btn sup-ok tap" onclick="supApprove()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>（上長）承認</button>
+                <button class="sup-btn sup-rt tap" onclick="supReturn()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l-4-4 4-4M5 10h11a4 4 0 0 1 0 8h-1"></path></svg>（上長）差し戻し</button>
+              </div>
+            </div>
             <div class="mcard" style="width:100%;margin-top:14px;text-align:left">
               <div class="mlabel">提出内容</div>
               <ul class="mtl" style="margin-top:9px">
@@ -5808,14 +5816,6 @@ body{
                 <li><div class="tt">獲得</div><div class="tx">新規見積 1件（みなとフード）</div></li>
                 <li class="amber"><div class="tt">次回</div><div class="tx">6/5 みなと見積提出 / 6/10 中央病院G 役員提示</div></li>
               </ul>
-            </div>
-            <!-- 上長（管理画面）操作のデモ：承認 / 差し戻し -->
-            <div id="aiSupBox" style="width:100%">
-              <div class="sup-cap">— デモ：上長（管理画面）の操作を再現 —</div>
-              <div class="sup-row">
-                <button class="sup-btn sup-ok tap" onclick="supApprove()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"></path></svg>（上長）承認</button>
-                <button class="sup-btn sup-rt tap" onclick="supReturn()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14l-4-4 4-4M5 10h11a4 4 0 0 1 0 8h-1"></path></svg>（上長）差し戻し</button>
-              </div>
             </div>
           </div>
           <div class="sc-foot" id="aiDoneFoot"><button class="bigbtn tap" onclick="root('s_home')">ホームへ戻る</button></div>

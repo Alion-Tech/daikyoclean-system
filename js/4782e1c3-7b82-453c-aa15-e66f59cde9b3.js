@@ -243,6 +243,19 @@ function editArp(el){
 function sendAiReport(){
   if(aiReport.status!=='draft'&&aiReport.status!=='returned'){ go('s_aidone'); return; }
   const re=aiReport.status==='returned';
+  // 初回提出（下書き → 提出）のみ、現在のプレビュー内容から日報一覧に1件追加する。
+  // 差し戻しの再提出は既存の一覧項目を編集する流れのため、ここでは追加しない。
+  if(!re){
+    var vs=[...document.querySelectorAll('#aiReportBody .arp-v')].map(e=>e.innerHTML);
+    var entry={ date:'2026/05/29（金）', range:(AI_RANGE[aiRange]||{}).lbl||'本日', status:'submitted',
+      summary:vs[0], detail:vs[1], next:vs[2], impression:vs[3] };
+    MDATA.dailyReports = MDATA.dailyReports || [];
+    var top=MDATA.dailyReports[0];
+    // 同一セッションで繰り返し提出しても二重に積み上がらないよう、
+    // 先頭が「本日（提出済）」ならそれを置き換える。
+    if(top && top.date===entry.date && top.status==='submitted'){ MDATA.dailyReports[0]=entry; }
+    else { MDATA.dailyReports.unshift(entry); }
+  }
   aiReport.status='submitted';
   renderAiReportStatus();
   renderAiDone();

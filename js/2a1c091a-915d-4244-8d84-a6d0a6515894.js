@@ -18,7 +18,7 @@ function arrow(dir){
 }
 function tbl(cols,rows,opt={}){
   const click = opt.click ? ' clickable' : '';
-  const onrow = opt.click ? ` onclick="openDrawer(this)"` : '';
+  const onrow = opt.click ? ` onclick="rowDrawer(event,this)"` : '';
   return `<div class="tbl-wrap"><div class="scroll"><table><thead><tr>${cols.map(c=>`<th${c.num?' class="num"':''}>${c.t||c}</th>`).join('')}</tr></thead>
    <tbody>${rows.map(r=>`<tr class="row${click}"${onrow}>${r.map((c,i)=>`<td${cols[i]&&cols[i].num?' class="num"':''}>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div></div>`;
 }
@@ -69,12 +69,13 @@ function scr_dashboard(){
         ['班C','高圧洗浄車 2号','京都市内','4','<div class="bar amber" style="width:90px"><i style="width:0%"></i></div>',tag('t-amber','整備待ち')],
         ['夜間班','産廃収集車 1号','大阪南部','8','<div class="bar" style="width:90px"><i style="width:0%"></i></div>',tag('t-blue','夜間予定')],
       ])}
+      ${note('表示は主要4班（計23件）。ほか予備・点検班を含め本日 計34件。','','truck')}
     </div></div>
     <div class="panel"><div class="ph">${ic('warn','pic')}対応が必要な項目</div><div class="pb"><ul class="timeline">
-      <li class="amber"><div class="tt">契約 · 残30日</div><div class="tx">みなとフードHD 清掃委託契約の更新交渉</div></li>
-      <li class="amber"><div class="tt">異常報告 · 栄町店</div><div class="tx">グリストラップ油脂過多 — 追加洗浄の提案</div></li>
-      <li><div class="tt">見積 · 期限本日</div><div class="tx">関西モール管理 排水管洗浄 見積提出</div></li>
-      <li class="eco"><div class="tt">連携 · 警告</div><div class="tx">弥生販売 売上データ 3件の差異確認</div></li>
+      <li class="amber" style="cursor:pointer" onclick="route('contract',2)"><div class="tt">契約 · 残30日</div><div class="tx">みなとフードHD 清掃委託契約の更新交渉</div></li>
+      <li class="amber" style="cursor:pointer" onclick="route('ops',1)"><div class="tt">異常報告 · 栄町店</div><div class="tx">グリストラップ油脂過多 — 追加洗浄の提案</div></li>
+      <li style="cursor:pointer" onclick="route('sales',1)"><div class="tt">見積 · 期限本日</div><div class="tx">関西モール管理 排水管洗浄 見積提出</div></li>
+      <li class="eco" style="cursor:pointer" onclick="route('integ',0)"><div class="tt">連携 · 警告</div><div class="tx">弥生販売 売上データ 3件の差異確認</div></li>
     </ul></div></div>
   </div>
   <div class="grid2">
@@ -112,7 +113,7 @@ function scr_cust(t){
     ['<span class="code">C-100245</span>','<b>みなとフードホールディングス</b>',tag('t-teal','飲食チェーン'),'佐藤','312',tag('t-green','3件'),tag('t-green','稼働中')],
     ['<span class="code">C-100244</span>','<b>関西モール管理</b>',tag('t-teal','商業施設'),'鈴木','118',tag('t-green','2件'),tag('t-green','稼働中')],
     ['<span class="code">C-100240</span>','<b>グルメテーブル中部FC</b>',tag('t-teal','飲食チェーン'),'梶原','167',tag('t-green','1件'),tag('t-green','稼働中')],
-    ['<span class="code">C-100236</span>','<b>中央総合病院グループ</b>',tag('t-teal','病院・福祉'),'高橋','9',tag('t-amber','更新中'),tag('t-amber','確認中')],
+    ['<span class="code">C-100236</span>','<b>中央総合病院グループ</b>',tag('t-teal','病院・福祉'),'高橋','9',tag('t-amber','1件'),tag('t-amber','更新交渉中')],
     ['<span class="code">C-100231</span>','<b>大学生協連合 関西</b>',tag('t-teal','学校'),'佐藤','24',tag('t-green','1件'),tag('t-green','稼働中')],
     ['<span class="code">C-100201</span>','<b>旧・西物産</b>',tag('t-gray','商業施設'),'—','0','—',tag('t-gray','停止')],
   ],{click:true});
@@ -183,7 +184,7 @@ function scr_cust_billto(){
       tbl([{t:'本社（親会社）'},{t:'請求額',num:true},{t:'入金',num:true},{t:'入金日'},{t:'差額',num:true},{t:'状態'},{t:'消込'}],[
         ['みなとフードHD','¥2,728,000','¥2,728,000','06/15','<span class="num">¥0</span>',tag('t-green','消込済'),`<span class="lnk" onclick="openPaymentForm('みなとフードHD')">消込</span>`],
         ['関西モール管理','¥1,298,000','¥800,000','06/18','<span class="num" style="color:var(--red)">▲¥498,000</span>',tag('t-amber','一部入金'),`<span class="lnk" onclick="openPaymentForm('関西モール管理')">消込</span>`],
-        ['中央総合病院グループ','¥185,000','¥0','—','<span class="num" style="color:var(--red)">▲¥185,000</span>',tag('t-amber','入金待ち'),`<span class="lnk" onclick="openPaymentForm('中央総合病院グループ')">入金登録</span> ${A('催促メール')}`],
+        ['中央総合病院グループ','¥185,000','¥0','—','<span class="num" style="color:var(--red)">▲¥185,000</span>',tag('t-amber','入金待ち'),`<span class="lnk" onclick="openAllocationForm('中央総合病院グループ',{register:true})">入金登録</span> ${A('催促メール')}`],
         ['グルメテーブル中部FC','¥1,078,000','¥1,100,000','06/12','<span class="num" style="color:var(--red)">+¥22,000</span>',tag('t-red','過不足あり'),`<span class="lnk" onclick="openPaymentForm('グルメテーブル中部FC')">消込</span>`],
       ])+
       note('1件の入金を複数請求書に合算消込できます')+
@@ -353,10 +354,73 @@ const DAILY_REPORTS = [
   {date:'2026/05/29', staff:'高橋 誠', visits:2, deals:0, tag:'t-amber', st:'下書き', sum:'中央総合病院グループと夜間作業の日程調整（電話）。クレーム対応1件は解決済み。'},
   {date:'2026/05/28', staff:'梶原 健司', visits:5, deals:3, tag:'t-green', st:'承認済', sum:'栄町店の油脂過多トラブルを受け、清掃頻度の見直し（月2回）を提案。追加洗浄の臨時受注を獲得。'},
 ];
+// AI日報の詳細本文（担当者＋日付キー）。状態バッジ＋サマリ/訪問詳細/次回/所感をモックで保持。
+const NIPPO_DETAIL = {
+  '梶原 健司|2026/05/29':{
+    visits:[
+      '<b>14:00 みなとフード 栄町店（商談）</b><br>新店舗のグリストラップ清掃見積を依頼受領。6/5提出予定で合意。',
+      '<b>15:30 関西モール 梅田（定期）</b><br>排水管洗浄の契約更新、条件はほぼ合意。月額据え置きで前向き。'
+    ],
+    next:'6/5 みなとフード 見積提出 ／ 6/10 中央病院G 役員提示の同行調整',
+    impression:'栄町店のトラブル履歴を提示できたことで、頻度見直しの提案がスムーズだった。更新案件も大詰め。'
+  },
+  '鈴木 一郎|2026/05/29':{
+    visits:[
+      '<b>11:00 関西モール 管理本部（商談）</b><br>排水管洗浄の年間契約を提案。役員提示を6/10に設定。',
+      '<b>16:00 中央総合病院グループ（電話フォロー）</b><br>夜間作業枠の調整を継続。来週中に日程確定の見込み。'
+    ],
+    next:'6/10 関西モール 役員提示資料の作成 ／ 中央病院G 夜間枠の確定',
+    impression:'年間一括の値ごろ感を示せたのが好感触。役員提示までに比較見積を整える。'
+  },
+  '高橋 誠|2026/05/29':{
+    visits:[
+      '<b>13:30 中央総合病院グループ（電話）</b><br>夜間作業の日程調整。騒音への配慮で時間帯を再設定。',
+      '<b>—（クレーム対応）</b><br>夜間騒音の苦情1件は作業時間の前倒しで解決済み。'
+    ],
+    next:'日程確定後に作業指示を起票 ／ 関係部署へ時間帯変更を周知',
+    impression:'先方の懸念は時間帯。柔軟に対応することで関係は良好に維持できている。下書きのため未提出。'
+  },
+  '梶原 健司|2026/05/28':{
+    visits:[
+      '<b>10:00 みなとフード 栄町店（緊急対応）</b><br>油脂過多トラブルを確認。清掃頻度の見直し（月2回）を提案。',
+      '<b>13:00 みなとフード 梅田北口店（定期）</b><br>追加洗浄の臨時受注を獲得。次回定期時に合わせて実施。'
+    ],
+    next:'追加洗浄の作業指示を起票 ／ 頻度変更の見積を本部経理へ提示',
+    impression:'トラブルを起点に頻度見直しまで踏み込めた。承認済みで請求反映へ。'
+  },
+};
+function openSalesNippo(staff,date){
+  const r = DAILY_REPORTS.find(x=>x.staff===staff && x.date===date) || {};
+  const d = NIPPO_DETAIL[staff+'|'+date] || {};
+  const sum = r.sum || '活動内容のサマリは準備中です。';
+  const visits = (d.visits&&d.visits.length)
+    ? d.visits.map(v=>`<div style="margin-bottom:8px;line-height:1.7">${v}</div>`).join('')
+    : '<div class="subtle">訪問詳細は記録されていません。</div>';
+  const next = d.next || '次回アクションは未設定です。';
+  const impression = d.impression || '—';
+  document.getElementById('drawerTitle').textContent = staff+' の日報';
+  document.getElementById('drawerSub').textContent = date+' · AI自動生成';
+  const sec=(label,html)=>`<div style="margin-bottom:14px"><div style="font-weight:700;font-size:12px;color:var(--brand);margin-bottom:5px">${label}</div><div style="font-size:13px;color:#2a3b42;line-height:1.7">${html}</div></div>`;
+  document.getElementById('drawerBody').innerHTML = `
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+      <span class="ai-pill">${ic('bolt')}AIが活動記録から自動生成</span>${tag(r.tag||'t-gray', r.st||'下書き')}
+    </div>
+    <dl class="kv"><dt>訪問件数</dt><dd>${r.visits!=null?r.visits:'—'}件</dd><dt>商談件数</dt><dd>${r.deals!=null?r.deals:'—'}件</dd></dl>
+    <div class="divline"></div>
+    ${sec('サマリ',sum)}
+    ${sec('訪問詳細',visits)}
+    ${sec('次回アクション',next)}
+    ${sec('所感',impression)}`;
+  document.getElementById('drawerFoot').innerHTML =
+    `<button class="btn primary" onclick="toast('PDFを出力しました');closeDrawer()">${ic('download')}PDF出力</button>
+     <button class="btn ghost" onclick="closeDrawer()">閉じる</button>`;
+  showDrawer();
+}
 function scr_sales_ai(){
   const rows = DAILY_REPORTS.map(r=>[
     r.date, `<b>${r.staff}</b>`, `<span class="num">${r.visits}</span>`, `<span class="num">${r.deals}</span>`,
-    `<span class="ai-pill">${ic('bolt')}AI生成</span>`, tag(r.tag,r.st), A('日報を見る')
+    `<span class="ai-pill">${ic('bolt')}AI生成</span>`, tag(r.tag,r.st),
+    `<span class="lnk" onclick="openSalesNippo('${esc(r.staff)}','${r.date}')">日報を見る</span>`
   ]);
   return note('営業がスマホアプリに入力した活動内容を <b>AIが標準フォーマットの日報に自動生成</b>。管理者はここで全営業の日報を閲覧・承認できます。','eco','bolt')+
   kpi([
@@ -366,7 +430,7 @@ function scr_sales_ai(){
     {l:'平均訪問',v:'3.4',u:'件/人',d:'0.3',dir:'up',icon:'pin'},
   ])+
   toolbar(searchBox('担当者・内容で検索…')+sel(['期間：今週','今日','今月'])+sel(['状態：すべて','下書き','提出済','承認済'])+`<span class="spacer"></span>`+btnCsv)+
-  tbl([{t:'日付'},{t:'担当者'},{t:'訪問',num:true},{t:'商談',num:true},{t:'作成'},{t:'状態'},''],rows,{click:true})+
+  tbl([{t:'日付'},{t:'担当者'},{t:'訪問',num:true},{t:'商談',num:true},{t:'作成'},{t:'状態'},''],rows)+
   panel(`${ic('bolt','pic')}AI日報プレビュー <span class="sub">2026/05/29 · 梶原 健司</span>`, `
     <div class="ai-report">
       <div class="ai-report-h"><span class="ai-pill">${ic('bolt')}AIが活動記録から自動生成</span><span class="subtle" style="font-size:11.5px">入力3タップ → 標準フォーマットで整形</span></div>
